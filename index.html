@@ -35,7 +35,7 @@ h1{margin:0;text-align:center;font-size:21px;letter-spacing:-.2px}
 .sub{margin:4px 0 16px;text-align:center;color:var(--muted);font-size:13px}
 .lbot{position:relative;overflow:hidden;background:var(--navy)}
 .lbot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
-@media(max-height:560px){.logo{display:none}.sub{display:none}}
+@media(max-height:640px){.logo{display:none}}@media(max-height:560px){.sub{display:none}}
 .field{display:flex;align-items:center;gap:8px;border:2px solid var(--line);border-radius:14px;padding:0 6px 0 14px;background:#fff}
 .field:focus-within{border-color:var(--ocean)}
 .field input{flex:1;min-width:0;border:0;outline:0;padding:13px 0;font-size:20px;letter-spacing:6px;text-align:center;background:transparent}
@@ -45,6 +45,9 @@ h1{margin:0;text-align:center;font-size:21px;letter-spacing:-.2px}
 .msg{min-height:20px;margin:10px 2px 0;font-size:13px;color:var(--danger);text-align:center}
 .msg.ok{color:var(--ok)}
 .tiny{margin-top:10px;text-align:center;font-size:12px;color:var(--muted)}
+.btn2{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:10px;padding:12px;border-radius:14px;border:2px solid var(--line);background:#fff;font-weight:700;font-size:15px;color:var(--ink)}
+.btn2 svg{width:20px;height:20px;fill:none;stroke:var(--ocean);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.msg.warn{color:#B54708}
 .tiny button{color:var(--ocean);text-decoration:underline}
 /* ---------- 메인 ---------- */
 header{position:sticky;top:0;z-index:5;background:var(--navy);color:#fff;padding:calc(10px + var(--sat)) 12px 0}
@@ -139,6 +142,7 @@ main{padding:6px 6px calc(96px + var(--sab))}
         </div>
         <button class="btn" id="goBtn" type="submit">들어가기</button>
       </form>
+      <button class="btn2" id="installBtn" type="button" hidden><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg><span>앱으로 설치 (PC·모바일)</span></button>
       <div class="msg" id="lmsg"></div>
       <div class="tiny" id="srvInfo"></div>
     </div>
@@ -191,7 +195,7 @@ main{padding:6px 6px calc(96px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v2';
+const VER = 'v3';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -215,7 +219,8 @@ async function api(path, { method = 'GET', body = null, json = null, timeout = 3
   clearTimeout(t);
   let j = null; try { j = await r.json(); } catch (_) {}
   if (r.status === 401 && TOKEN && path !== '/api/album/login') { logoutLocal(); throw new Error('다시 로그인해 주세요'); }
-  if (!r.ok || !(j && j.ok)) throw new Error((j && j.error) || ('오류 ' + r.status));
+  if (!j) throw new Error(`서버 응답이 이상해요 (HTTP ${r.status}, ${SRV.replace(/^https?:\/\//, '')}) — 서버 주소를 확인하세요`);
+  if (!r.ok || !j.ok) throw new Error(j.error || ('오류 ' + r.status));
   return j;
 }
 function xhrUpload(url, blob, onProgress) {
@@ -323,7 +328,17 @@ async function pingInfo() {
     if (TOKEN && !ME) { try { await enter(); return; } catch (_) {} }
     el.innerHTML = `서버 ${esc(j.version)} · <button type="button" id="chgSrv">서버 주소</button>`;
   } catch (err) {
-    el.innerHTML = `${esc(err.message)}<br><button type="button" id="chgSrv">서버 주소 바꾸기</button>`;
+    let why = err.message;
+    try {   // 앨범 주소는 없어도 /api/me 는 모든 버전에 있다 → 서버 버전으로 원인을 가린다
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
+      const r = await fetch(SRV + '/api/me', { headers: { 'X-SACHIL': '1' }, cache: 'no-store', signal: ctl.signal }); clearTimeout(t);
+      let me = null; try { me = await r.json(); } catch (_) {}
+      if (me && me.server === 'sachil') {
+        const v = String(me.version || ''); const [a, b] = v.split('.').map(Number);
+        why = (a < 15 || (a === 15 && b < 8)) ? `PC 서버가 아직 ${v}이에요. 앨범은 서버 15.8부터 돼요 — test 저장소 PR #219를 머지하면 5~10분 안에 자동 업데이트돼요` : `서버 ${v}인데 앨범 응답이 이상해요: ${err.message}`;
+      } else why = `서버 응답이 이상해요 (HTTP ${r.status}, ${SRV.replace(/^https?:\/\//, '')}) — 서버 주소가 app.sachil47.com인지 확인하세요`;
+    } catch (_) {}
+    el.innerHTML = `<span class="msg warn" style="display:block;min-height:0;margin:0 0 6px">${esc(why)}</span><button type="button" id="chgSrv">서버 주소 바꾸기</button>`;
   }
   const b = $('#chgSrv'); if (b) b.addEventListener('click', changeSrv);
 }
@@ -392,7 +407,7 @@ $('#menuBtn').addEventListener('click', async () => {
   const items = [
     { k: 'usage', icon: I.disk, label: '저장 공간', sub: USAGE ? `${fmtMB(USAGE.bytes)} / ${fmtMB(USAGE.max_bytes)} 사용 · 사진 ${USAGE.count}장` : '' },
     ...(ME && ME.admin ? [{ k: 'code', icon: I.key, label: ME.has_code ? '접속코드 바꾸기' : '접속코드 정하기', sub: ME.has_code ? '둘이 쓰는 접속코드 · 바꾸면 다른 폰은 다시 로그인' : '아직 없어요 — 정하면 관리자 코드 없이 들어올 수 있어요' }] : []),
-    { k: 'home', icon: I.home, label: '홈 화면에 추가하는 법', sub: '앱처럼 바로 열기' },
+    ...(isStandalone() ? [] : [{ k: 'home', icon: I.home, label: '앱으로 설치', sub: 'PC·모바일 홈 화면에 아이콘으로' }]),
     { k: 'srv', icon: I.srv, label: '서버 주소', sub: SRV.replace(/^https?:\/\//, '') },
     { k: 'out', icon: I.out, label: '로그아웃', red: true },
   ];
@@ -400,7 +415,7 @@ $('#menuBtn').addEventListener('click', async () => {
   if (!it) return;
   if (it.k === 'usage') toast(items[0].sub, 3000);
   if (it.k === 'srv') changeSrv();
-  if (it.k === 'home') dialog({ title: '홈 화면에 추가', text: '갤럭시(크롬·삼성인터넷): 메뉴(⋮ 또는 ≡) → "홈 화면에 추가"\n아이폰(사파리): 공유(□↑) → "홈 화면에 추가"\n추가하면 앱처럼 아이콘으로 바로 열려요.', noInput: true, okText: '알겠어요' });
+  if (it.k === 'home') installApp();
   if (it.k === 'code') {
     const v = await dialog({ title: ME.has_code ? '접속코드 바꾸기' : '접속코드 정하기', text: '4자 이상. 둘 다 이 코드로 들어와요. 비워 두고 저장하면 코드를 없애요(관리자 코드로만 입장).', password: true, placeholder: '새 접속코드', okText: '저장' });
     if (v === null) return;
@@ -597,9 +612,33 @@ $('#vDel').addEventListener('click', async () => {
   } catch (err) { toast(err.message); }
 });
 
+// ---------- 앱 설치(PWA): 크롬(PC·안드로이드)은 한 번 눌러 설치, 아이폰은 안내
+let installEv = null;
+const isStandalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function paintInstall() { const b = $('#installBtn'); b.hidden = isStandalone(); }
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; paintInstall(); });
+window.addEventListener('appinstalled', () => { installEv = null; toast('설치됐어요. 홈 화면(또는 바탕화면)에서 열 수 있어요', 3000); paintInstall(); });
+async function installApp() {
+  if (installEv) {
+    const ev = installEv; installEv = null;
+    try { ev.prompt(); const r = await ev.userChoice; if (r && r.outcome !== 'accepted') { installEv = ev; toast('설치를 취소했어요', 1500); } }
+    catch (_) { installEv = ev; }
+    return;
+  }
+  const text = isIOS()
+    ? '아이폰·아이패드(사파리): 아래 공유 버튼(□↑) → "홈 화면에 추가" → 추가\n\n크롬에서 열었다면 사파리로 다시 열어 주세요.'
+    : /Android/i.test(navigator.userAgent)
+      ? '안드로이드: 브라우저 메뉴(⋮ 또는 ≡) → "앱 설치" 또는 "홈 화면에 추가"\n\n설치 버튼이 바로 뜨지 않으면 페이지를 한 번 새로고침한 뒤 다시 눌러 보세요.'
+      : 'PC(크롬·엣지): 주소창 오른쪽 끝의 설치 아이콘(⊕ 또는 모니터 모양)을 누르거나, 브라우저 메뉴 → "앱 설치"\n\n이미 설치돼 있으면 시작 메뉴·바탕화면에서 "유진·아름 사진"을 찾으세요.';
+  dialog({ title: '앱으로 설치', text, noInput: true, okText: '알겠어요' });
+}
+$('#installBtn').addEventListener('click', installApp);
+
 // ---------- 시작
 function measureHead() { const h = document.querySelector('header'); if (h && !$('#main').hidden) document.documentElement.style.setProperty('--hh', h.offsetHeight + 'px'); }
 window.addEventListener('resize', measureHead);
+paintInstall();
 if (TOKEN) enter().catch(() => showLogin()); else showLogin();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
 })();
