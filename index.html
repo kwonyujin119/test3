@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<title>유진·아름 사진 저장소</title>
+<meta name="description" content="유진·아름 둘만의 사진 저장소 — 암호로 들어가 사진을 올리고 봅니다. 사진은 PC 서버에만 저장됩니다.">
+<link rel="manifest" href="manifest.webmanifest?v=1">
+<meta name="theme-color" content="#0B1B3F">
+<link rel="icon" href="icons/icon-192.png?v=1" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="유진·아름 사진">
+<meta name="robots" content="noindex,nofollow">
+<style>
+:root{color-scheme:light;--navy:#0B1B3F;--navy-2:#13285A;--ocean:#244EA2;--ocean-soft:#EAF0FA;--yellow:#FDD000;--yellow-soft:#FFF4B8;
+  --bg:#F3F4F6;--card:#fff;--line:#E2E5EA;--ink:#0B1B3F;--muted:#5F6672;--danger:#D92D20;--ok:#067647;
+  --sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{font:15px/1.45 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;background:var(--bg);color:var(--ink);overscroll-behavior-y:none}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input,textarea{font:inherit}
+[hidden]{display:none!important}
+.screen{min-height:100%}
+/* ---------- 로그인 ---------- */
+#login{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:calc(24px + var(--sat)) 20px calc(24px + var(--sab));background:linear-gradient(180deg,var(--navy) 0 46%,var(--bg) 46%)}
+.lcard{width:100%;max-width:380px;background:var(--card);border-radius:22px;padding:26px 22px 22px;box-shadow:0 18px 50px rgba(11,27,63,.25)}
+.logo{display:grid;place-items:center;width:84px;height:84px;margin:-70px auto 12px;border-radius:24px;background:var(--navy);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.logo img{width:84px;height:84px;border-radius:24px}
+h1{margin:0;text-align:center;font-size:21px;letter-spacing:-.2px}
+.sub{margin:6px 0 20px;text-align:center;color:var(--muted);font-size:13px}
+.who{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.who button{display:flex;align-items:center;gap:10px;padding:12px;border:2px solid var(--line);border-radius:14px;background:#fff;font-weight:700;font-size:16px}
+.who button .av{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--ocean-soft);color:var(--ocean);font-weight:800}
+.who button[aria-pressed=true]{border-color:var(--navy);background:var(--yellow-soft)}
+.who button[aria-pressed=true] .av{background:var(--navy);color:var(--yellow)}
+.field{display:flex;align-items:center;gap:8px;border:2px solid var(--line);border-radius:14px;padding:0 6px 0 14px;background:#fff}
+.field:focus-within{border-color:var(--ocean)}
+.field input{flex:1;min-width:0;border:0;outline:0;padding:13px 0;font-size:17px;letter-spacing:2px;background:transparent}
+.field button{padding:8px 10px;color:var(--muted);font-size:13px}
+.btn{display:block;width:100%;margin-top:14px;padding:14px;border-radius:14px;background:var(--navy);color:var(--yellow);font-weight:800;font-size:16px}
+.btn:disabled{opacity:.6}
+.msg{min-height:20px;margin:10px 2px 0;font-size:13px;color:var(--danger);text-align:center}
+.msg.ok{color:var(--ok)}
+.tiny{margin-top:14px;text-align:center;font-size:12px;color:var(--muted)}
+.tiny button{color:var(--ocean);text-decoration:underline}
+/* ---------- 메인 ---------- */
+header{position:sticky;top:0;z-index:5;background:var(--navy);color:#fff;padding:calc(10px + var(--sat)) 12px 0}
+.hrow{display:flex;align-items:center;gap:8px;height:48px}
+.hrow .ttl{flex:1;min-width:0;font-weight:800;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hrow .ttl small{display:block;font-weight:500;font-size:12px;color:#C9D3EA}
+.ib{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;color:#fff}
+.ib:active{background:rgba(255,255,255,.12)}
+.ib svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.chips{display:flex;gap:8px;padding:8px 0 10px}
+.chips button{padding:7px 14px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font-weight:600;font-size:13px}
+.chips button[aria-pressed=true]{background:var(--yellow);color:var(--navy)}
+main{padding:6px 6px calc(96px + var(--sab))}
+.month{position:sticky;top:var(--hh,106px);z-index:2;margin:10px 4px 6px;display:flex;align-items:baseline;gap:8px;padding:6px 8px;border-radius:10px;background:rgba(243,244,246,.92);backdrop-filter:blur(6px);font-weight:800;font-size:15px}
+.month small{font-weight:500;color:var(--muted);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
+@media(min-width:560px){.grid{grid-template-columns:repeat(4,1fr)}}
+@media(min-width:820px){.grid{grid-template-columns:repeat(6,1fr)}main{padding-left:12px;padding-right:12px}}
+.tile{position:relative;aspect-ratio:1;overflow:hidden;background:#DDE2EA;border-radius:4px}
+.tile img{width:100%;height:100%;object-fit:cover;display:block}
+.tile .w{position:absolute;left:5px;bottom:5px;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;font-size:11px;font-weight:800;color:var(--navy);background:var(--yellow);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.tile .w.a{background:#fff;color:var(--ocean)}
+.tile .m{position:absolute;right:5px;top:5px;width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 1.5px var(--ocean)}
+.empty{margin:60px 20px;text-align:center;color:var(--muted)}
+.empty b{display:block;margin-bottom:6px;color:var(--ink);font-size:17px}
+#fab{position:fixed;right:18px;bottom:calc(20px + var(--sab));z-index:6;display:grid;place-items:center;width:60px;height:60px;border-radius:20px;background:var(--yellow);color:var(--navy);box-shadow:0 10px 26px rgba(11,27,63,.35)}
+#fab svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round}
+#upbar{position:fixed;left:12px;right:90px;bottom:calc(22px + var(--sab));z-index:6;padding:10px 12px;border-radius:14px;background:var(--navy);color:#fff;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+#upbar .bar{height:4px;margin-top:7px;border-radius:2px;background:rgba(255,255,255,.2);overflow:hidden}
+#upbar .bar i{display:block;height:100%;width:0;background:var(--yellow);transition:width .2s}
+#upbar .row{display:flex;justify-content:space-between;gap:8px}
+#upbar .row b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#upbar button{color:#C9D3EA;text-decoration:underline;white-space:nowrap}
+/* ---------- 시트·대화상자 ---------- */
+.dim{position:fixed;inset:0;z-index:20;background:rgba(6,8,14,.5);display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:100%;max-width:480px;background:#fff;border-radius:22px 22px 0 0;padding:10px 14px calc(14px + var(--sab))}
+.sheet .grab{width:40px;height:4px;margin:0 auto 8px;border-radius:2px;background:#D5D9E0}
+.sheet h3{margin:6px 6px 10px;font-size:15px;color:var(--muted);font-weight:600}
+.sheet .it{display:flex;align-items:center;gap:12px;width:100%;padding:13px 10px;border-radius:12px;text-align:left;font-size:16px}
+.sheet .it:active{background:var(--bg)}
+.sheet .it svg{width:22px;height:22px;flex:none;fill:none;stroke:var(--ocean);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sheet .it.red,.sheet .it.red svg{color:var(--danger);stroke:var(--danger)}
+.sheet .it small{display:block;color:var(--muted);font-size:12px}
+.sheet .cancel{width:100%;margin-top:6px;padding:13px;border-radius:12px;background:var(--bg);font-weight:700}
+.dlg{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:20px;background:rgba(6,8,14,.5)}
+.dlg .box{width:100%;max-width:380px;background:#fff;border-radius:18px;padding:18px}
+.dlg h3{margin:0 0 8px;font-size:17px}
+.dlg p{margin:0 0 12px;color:var(--muted);font-size:13px;white-space:pre-line}
+.dlg textarea,.dlg input{width:100%;padding:11px 12px;border:2px solid var(--line);border-radius:12px;outline:0;background:#fff}
+.dlg textarea{min-height:90px;resize:vertical}
+.dlg textarea:focus,.dlg input:focus{border-color:var(--ocean)}
+.dlg .acts{display:flex;gap:8px;margin-top:12px}
+.dlg .acts button{flex:1;padding:12px;border-radius:12px;background:var(--bg);font-weight:700}
+.dlg .acts .pri{background:var(--navy);color:var(--yellow)}
+.dlg .acts .red{background:#FEE4E2;color:var(--danger)}
+/* ---------- 뷰어 ---------- */
+#viewer{position:fixed;inset:0;z-index:15;background:#06080E;color:#fff;display:flex;flex-direction:column;touch-action:pan-y}
+.vtop{position:absolute;left:0;right:0;top:0;z-index:2;display:flex;align-items:center;gap:6px;padding:calc(6px + var(--sat)) 8px 10px;background:linear-gradient(rgba(0,0,0,.6),transparent);transition:opacity .2s}
+.vtop .vm{flex:1;min-width:0;text-align:center;font-size:13px;line-height:1.3}
+.vtop .vm b{display:block;font-size:14px}
+.vtop .vm span{color:#C9D3EA}
+.vstage{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden}
+.vstage img{max-width:100%;max-height:100%;object-fit:contain;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);user-select:none;-webkit-user-drag:none}
+.vstage img.full{opacity:0;transition:opacity .15s}
+.vstage img.full.on{opacity:1}
+.vstage.sw{transition:transform .18s}
+.vbot{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:12px 10px calc(10px + var(--sab));background:linear-gradient(transparent,rgba(0,0,0,.7));transition:opacity .2s}
+.vmemo{min-height:20px;margin:0 8px 10px;font-size:14px;white-space:pre-wrap;word-break:break-word}
+.vmemo:empty::before{content:'메모 없음 — 아래 메모 버튼으로 남기기';color:#8B96AE;font-size:13px}
+.vbtns{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.vbtns button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border-radius:12px;font-size:12px;color:#fff}
+.vbtns button:active{background:rgba(255,255,255,.1)}
+.vbtns svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.vbtns .red{color:#FDA29B}
+#viewer.hide .vtop,#viewer.hide .vbot{opacity:0;pointer-events:none}
+.varr{position:absolute;top:50%;z-index:2;display:none;place-items:center;width:52px;height:52px;margin-top:-26px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff}
+.varr svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.varr.p{left:14px}.varr.n{right:14px}
+@media(hover:hover) and (min-width:700px){.varr{display:grid}#viewer.hide .varr{opacity:0}}
+#toast{position:fixed;left:50%;bottom:calc(100px + var(--sab));z-index:40;transform:translateX(-50%);max-width:88vw;padding:10px 16px;border-radius:12px;background:rgba(11,27,63,.95);color:#fff;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;text-align:center}
+#toast.on{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="login" class="screen">
+  <div class="lcard">
+    <div class="logo"><img src="icons/icon-192.png?v=1" alt=""></div>
+    <h1>유진 · 아름 사진 저장소</h1>
+    <p class="sub">둘만 보는 곳이에요. 사진은 PC 서버에만 저장돼요.</p>
+    <div class="who" id="whoPick">
+      <button type="button" data-who="유진" aria-pressed="false"><span class="av">유</span>유진</button>
+      <button type="button" data-who="아름" aria-pressed="false"><span class="av">아</span>아름</button>
+    </div>
+    <form id="loginForm" autocomplete="off">
+      <div class="field">
+        <input id="code" type="password" inputmode="text" placeholder="암호" autocomplete="current-password" enterkeyhint="go">
+        <button type="button" id="eye">보기</button>
+      </div>
+      <button class="btn" id="goBtn" type="submit">들어가기</button>
+    </form>
+    <div class="msg" id="lmsg"></div>
+    <div class="tiny" id="srvInfo"></div>
+  </div>
+</div>
+
+<!-- 메인 -->
+<div id="main" class="screen" hidden>
+  <header>
+    <div class="hrow">
+      <div class="ttl">유진 · 아름 사진 저장소<small id="hsub">불러오는 중…</small></div>
+      <button class="ib" id="refreshBtn" aria-label="새로고침"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></button>
+      <button class="ib" id="menuBtn" aria-label="메뉴"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></svg></button>
+    </div>
+    <div class="chips" id="chips">
+      <button data-f="all" aria-pressed="true">전체</button>
+      <button data-f="유진" aria-pressed="false">유진</button>
+      <button data-f="아름" aria-pressed="false">아름</button>
+    </div>
+  </header>
+  <main id="grid"></main>
+  <div id="upbar" hidden>
+    <div class="row"><b id="upTxt"></b><button type="button" id="upCancel">그만</button></div>
+    <div class="bar"><i id="upFill"></i></div>
+  </div>
+  <button id="fab" aria-label="사진 올리기"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+</div>
+
+<!-- 뷰어 -->
+<div id="viewer" hidden>
+  <div class="vstage" id="vstage"><img class="th" id="vth" alt=""><img class="full" id="vfull" alt=""></div>
+  <div class="vtop">
+    <button class="ib" id="vClose" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="vm" id="vmeta"></div>
+    <div style="width:40px"></div>
+  </div>
+  <button class="varr p" id="vPrev" aria-label="이전"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button class="varr n" id="vNext" aria-label="다음"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+  <div class="vbot">
+    <div class="vmemo" id="vmemo"></div>
+    <div class="vbtns">
+      <button id="vMemo"><svg viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z"/></svg>메모</button>
+      <button id="vSave"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>저장</button>
+      <button id="vShare"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></svg>공유</button>
+      <button id="vDel" class="red"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>삭제</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status"></div>
+<input type="file" id="pick" accept="image/*" multiple hidden>
+<input type="file" id="cam" accept="image/*" capture="environment" hidden>
+
+<script>
+(() => {
+'use strict';
+const VER = 'v1';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
+             set: (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} },
+             del: k => { try { localStorage.removeItem(k); } catch (_) {} } };
+const DEF_SRV = 'https://app.sachil47.com';
+const qsSrv = new URLSearchParams(location.search).get('srv');
+let SRV = (qsSrv || LS.get('album.srv') || DEF_SRV).replace(/\/+$/, '');
+if (qsSrv) LS.set('album.srv', SRV);
+let TOKEN = LS.get('album.token') || '', ME = null, PHOTOS = [], FILTER = 'all', USAGE = null, lastLoad = 0;
+let who = LS.get('album.who') || '';
+
+// ---------- 서버 호출
+async function api(path, { method = 'GET', body = null, json = null, timeout = 30000 } = {}) {
+  const h = { 'X-SACHIL': '1' };
+  if (TOKEN) h.Authorization = 'Bearer ' + TOKEN;
+  if (json) { h['Content-Type'] = 'application/json'; body = JSON.stringify(json); }
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), timeout);
+  let r;
+  try { r = await fetch(SRV + path, { method, headers: h, body, signal: ctl.signal, cache: 'no-store' }); }
+  catch (e) { clearTimeout(t); throw new Error('서버에 연결할 수 없어요. PC 서버가 켜져 있는지 확인해 주세요'); }
+  clearTimeout(t);
+  let j = null; try { j = await r.json(); } catch (_) {}
+  if (r.status === 401 && TOKEN && path !== '/api/album/login') { logoutLocal(); throw new Error('다시 로그인해 주세요'); }
+  if (!r.ok || !(j && j.ok)) throw new Error((j && j.error) || ('오류 ' + r.status));
+  return j;
+}
+function xhrUpload(url, blob, onProgress) {
+  return new Promise((ok, no) => {
+    const x = new XMLHttpRequest();
+    x.open('POST', url);
+    x.setRequestHeader('X-SACHIL', '1');
+    x.setRequestHeader('Authorization', 'Bearer ' + TOKEN);
+    x.timeout = 600000;
+    x.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+    x.onload = () => {
+      let j = null; try { j = JSON.parse(x.responseText); } catch (_) {}
+      if (x.status === 401) { logoutLocal(); return no(new Error('다시 로그인해 주세요')); }
+      if (x.status >= 200 && x.status < 300 && j && j.ok) ok(j); else no(new Error((j && j.error) || ('오류 ' + x.status)));
+    };
+    x.onerror = () => no(new Error('전송 실패(연결이 끊겼어요)'));
+    x.ontimeout = () => no(new Error('전송 시간이 너무 오래 걸려 멈췄어요'));
+    x.send(blob);
+    upXhr = x;
+  });
+}
+const thumbUrl = id => `${SRV}/api/album/thumb/${id}?t=${encodeURIComponent(TOKEN)}`;
+const fileUrl = (id, dl) => `${SRV}/api/album/file/${id}?t=${encodeURIComponent(TOKEN)}${dl ? '&dl=1' : ''}`;
+
+// ---------- 화면 도우미
+let toastT = 0;
+function toast(msg, ms = 2400) { const el = $('#toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), ms); }
+const fmtMB = b => b >= 1024 * 1024 * 1024 ? (b / 1073741824).toFixed(2) + 'GB' : b >= 1024 * 1024 ? (b / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(b / 1024)) + 'KB';
+const dateOf = p => new Date((p.taken || p.ts) * 1000);
+const fmtDate = d => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${['일','월','화','수','목','금','토'][d.getDay()]} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+const monthKey = d => `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
+
+// 뒤로 버튼으로 창 닫기: 창을 열 때 기록 한 칸을 쌓고, 뒤로(popstate)가 오면 맨 위 창을 닫는다
+const STACK = []; let skipPop = 0;
+function pushLayer(close) { STACK.push(close); history.pushState({ album: STACK.length }, ''); }
+function closeTop() {   // 화면에서 닫기: 기록 한 칸을 되돌리되(popstate) 그 신호로 또 닫지 않게
+  const c = STACK.pop(); if (!c) return;
+  skipPop++; setTimeout(() => { skipPop = 0; }, 800);
+  try { history.back(); } catch (_) {}
+  c();
+}
+window.addEventListener('popstate', () => { if (skipPop > 0) { skipPop--; return; } const c = STACK.pop(); if (c) c(); });
+
+function sheet(title, items) {
+  return new Promise(res => {
+    const dim = document.createElement('div'); dim.className = 'dim';
+    dim.innerHTML = `<div class="sheet"><div class="grab"></div>${title ? `<h3>${esc(title)}</h3>` : ''}
+      ${items.map((it, i) => `<button type="button" class="it ${it.red ? 'red' : ''}" data-i="${i}">${it.icon || ''}<span>${esc(it.label)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span></button>`).join('')}
+      <button type="button" class="cancel">닫기</button></div>`;
+    let done = false;
+    const close = v => { if (done) return; done = true; dim.remove(); res(v); };
+    let picked = null;
+    pushLayer(() => close(picked));
+    dim.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) { if (e.target === dim) closeTop(); return; }
+      if (b.classList.contains('cancel')) return closeTop();
+      picked = items[+b.dataset.i]; closeTop();
+    });
+    document.body.appendChild(dim);
+  });
+}
+function dialog({ title, text, value = '', multiline = false, placeholder = '', okText = '저장', danger = false, password = false, noInput = false }) {
+  return new Promise(res => {
+    const d = document.createElement('div'); d.className = 'dlg';
+    d.innerHTML = `<div class="box"><h3>${esc(title)}</h3>${text ? `<p>${esc(text)}</p>` : ''}
+      ${noInput ? '' : multiline ? `<textarea placeholder="${esc(placeholder)}">${esc(value)}</textarea>` : `<input type="${password ? 'password' : 'text'}" placeholder="${esc(placeholder)}" value="${esc(value)}" autocomplete="off">`}
+      <div class="acts"><button type="button" class="no">취소</button><button type="button" class="${danger ? 'red' : 'pri'}">${esc(okText)}</button></div></div>`;
+    let done = false;
+    const close = v => { if (done) return; done = true; d.remove(); res(v); };
+    let result = null;
+    pushLayer(() => close(result));
+    d.addEventListener('click', e => {
+      if (e.target === d || e.target.classList.contains('no')) return closeTop();
+      const b = e.target.closest('.acts button'); if (!b || b.classList.contains('no')) return;
+      const inp = d.querySelector('textarea,input');
+      result = noInput ? true : inp.value; closeTop();
+    });
+    d.addEventListener('keydown', e => { if (e.key === 'Enter' && !multiline && e.target.tagName === 'INPUT') { e.preventDefault(); result = e.target.value; closeTop(); } });
+    document.body.appendChild(d);
+    const inp = d.querySelector('textarea,input'); if (inp) { inp.focus(); if (!multiline) inp.select(); }
+  });
+}
+
+// ---------- 로그인
+function paintWho() { document.querySelectorAll('#whoPick button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.who === who))); }
+$('#whoPick').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; who = b.dataset.who; LS.set('album.who', who); paintWho(); $('#code').focus(); });
+$('#eye').addEventListener('click', () => { const i = $('#code'); i.type = i.type === 'password' ? 'text' : 'password'; $('#eye').textContent = i.type === 'password' ? '보기' : '숨김'; });
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const m = $('#lmsg'); m.className = 'msg';
+  if (!who) { m.textContent = '먼저 누구인지 골라 주세요'; return; }
+  const code = $('#code').value.trim();
+  if (!code) { m.textContent = '암호를 입력해 주세요'; return; }
+  $('#goBtn').disabled = true; m.textContent = '확인하는 중…'; m.className = 'msg ok';
+  try {
+    const j = await api('/api/album/login', { method: 'POST', json: { who, code } });
+    TOKEN = j.token; LS.set('album.token', TOKEN);
+    $('#code').value = '';
+    await enter();
+  } catch (err) { m.className = 'msg'; m.textContent = err.message; }
+  $('#goBtn').disabled = false;
+});
+async function pingInfo() {
+  const el = $('#srvInfo');
+  try {
+    const j = await api('/api/album/ping', { timeout: 8000 });
+    if (TOKEN && !ME) { try { await enter(); return; } catch (_) {} }
+    el.innerHTML = (j.has_code ? '' : '아직 앨범 암호가 없어요 — 관리자(교수) 코드로 들어와 ⋯ 메뉴에서 정해 주세요<br>') + `서버 ${esc(j.version)} · <button type="button" id="chgSrv">서버 주소</button>`;
+  } catch (err) {
+    el.innerHTML = `${esc(err.message)}<br><button type="button" id="chgSrv">서버 주소 바꾸기</button>`;
+  }
+  const b = $('#chgSrv'); if (b) b.addEventListener('click', changeSrv);
+}
+async function changeSrv() {
+  const v = await dialog({ title: '서버 주소', text: '보통은 바꿀 필요가 없어요. 비우면 기본 주소(app.sachil47.com)로 돌아가요.', value: SRV === DEF_SRV ? '' : SRV, placeholder: DEF_SRV, okText: '바꾸기' });
+  if (v === null) return;
+  const nv = (v.trim() || DEF_SRV).replace(/\/+$/, '');
+  if (!/^https?:\/\//.test(nv)) { toast('http:// 또는 https:// 로 시작해야 해요'); return; }
+  SRV = nv; if (nv === DEF_SRV) LS.del('album.srv'); else LS.set('album.srv', nv);
+  toast('서버 주소를 바꿨어요'); pingInfo();
+}
+function logoutLocal() { TOKEN = ''; ME = null; PHOTOS = []; LS.del('album.token'); if (vOpen) hideViewer(); showLogin(); }
+function showLogin() { $('#main').hidden = true; $('#viewer').hidden = true; $('#login').hidden = false; paintWho(); pingInfo(); }
+
+// ---------- 메인
+async function enter() {
+  const j = await api('/api/album/me');
+  ME = j; USAGE = j;
+  $('#login').hidden = true; $('#main').hidden = false;
+  paintHead(); measureHead();
+  await load();
+}
+function paintHead() {
+  if (!USAGE) return;
+  $('#hsub').textContent = `${ME ? ME.who + ' 로그인 · ' : ''}사진 ${USAGE.count}장 · ${fmtMB(USAGE.bytes)} 사용`;
+}
+async function load(quiet) {
+  try {
+    const j = await api('/api/album/photos', { timeout: 60000 });
+    PHOTOS = j.photos; USAGE = j; lastLoad = Date.now();
+    paintHead(); render();
+  } catch (err) { if (!quiet) toast(err.message); }
+}
+const visible = () => FILTER === 'all' ? PHOTOS : PHOTOS.filter(p => p.who === FILTER);
+function render() {
+  const list = visible(); const root = $('#grid');
+  if (!list.length) {
+    root.innerHTML = `<div class="empty"><b>${FILTER === 'all' ? '아직 사진이 없어요' : FILTER + ' 사진이 아직 없어요'}</b>오른쪽 아래 + 를 눌러 올려 보세요</div>`;
+    return;
+  }
+  const groups = new Map();
+  for (const p of list) { const k = monthKey(dateOf(p)); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
+  let html = '';
+  for (const [k, arr] of groups) {
+    html += `<div class="month">${esc(k)}<small>${arr.length}장</small></div><div class="grid">`;
+    for (const p of arr) html += `<button type="button" class="tile" data-id="${p.id}"><img loading="lazy" decoding="async" src="${thumbUrl(p.id)}" alt=""><span class="w ${p.who === '아름' ? 'a' : ''}">${esc(p.who[0])}</span>${p.memo ? '<span class="m"></span>' : ''}</button>`;
+    html += '</div>';
+  }
+  root.innerHTML = html;
+}
+$('#chips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; FILTER = b.dataset.f; document.querySelectorAll('#chips button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); render(); window.scrollTo(0, 0); });
+$('#grid').addEventListener('click', e => { const t = e.target.closest('.tile'); if (!t) return; openViewer(t.dataset.id); });
+$('#refreshBtn').addEventListener('click', async () => { $('#refreshBtn').style.opacity = '.5'; await load(); $('#refreshBtn').style.opacity = ''; toast('새로 불러왔어요', 1200); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && TOKEN && ME && Date.now() - lastLoad > 60000 && !upQueue.length) load(true); });
+
+// ---------- 메뉴
+const I = {
+  key: '<svg viewBox="0 0 24 24"><circle cx="8" cy="14" r="4"/><path d="M11 11l9-9M16 6l3 3M18 4l2 2"/></svg>',
+  disk: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>',
+  srv: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg>',
+  out: '<svg viewBox="0 0 24 24"><path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M15 8l4 4-4 4M19 12H9"/></svg>',
+  home: '<svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"/></svg>',
+  pick: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>',
+  cam: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+};
+$('#menuBtn').addEventListener('click', async () => {
+  const items = [
+    { k: 'usage', icon: I.disk, label: '저장 공간', sub: USAGE ? `${fmtMB(USAGE.bytes)} / ${fmtMB(USAGE.max_bytes)} 사용 · 사진 ${USAGE.count}장` : '' },
+    ...(ME && ME.admin ? [{ k: 'code', icon: I.key, label: ME.has_code ? '앨범 암호 바꾸기' : '앨범 암호 정하기', sub: ME.has_code ? '두 사람이 쓰는 암호 · 바꾸면 다른 폰은 다시 로그인' : '아직 없어요 — 정하면 관리자 코드 없이 들어올 수 있어요' }] : []),
+    { k: 'home', icon: I.home, label: '홈 화면에 추가하는 법', sub: '앱처럼 바로 열기' },
+    { k: 'srv', icon: I.srv, label: '서버 주소', sub: SRV.replace(/^https?:\/\//, '') },
+    { k: 'out', icon: I.out, label: '로그아웃', red: true },
+  ];
+  const it = await sheet(`${ME ? ME.who : ''} · 앨범 ${VER} · 서버 ${ME ? ME.version : ''}`, items);
+  if (!it) return;
+  if (it.k === 'usage') toast(items[0].sub, 3000);
+  if (it.k === 'srv') changeSrv();
+  if (it.k === 'home') dialog({ title: '홈 화면에 추가', text: '갤럭시(크롬·삼성인터넷): 메뉴(⋮ 또는 ≡) → "홈 화면에 추가"\n아이폰(사파리): 공유(□↑) → "홈 화면에 추가"\n추가하면 앱처럼 아이콘으로 바로 열려요.', noInput: true, okText: '알겠어요' });
+  if (it.k === 'code') {
+    const v = await dialog({ title: ME.has_code ? '앨범 암호 바꾸기' : '앨범 암호 정하기', text: '4자 이상. 유진·아름 둘 다 이 암호로 들어와요. 비워 두고 저장하면 암호를 없애요(관리자 코드로만 입장).', password: true, placeholder: '새 암호', okText: '저장' });
+    if (v === null) return;
+    try { const j = await api('/api/album/code', { method: 'POST', json: { code: v.trim() } }); ME.has_code = j.has_code; toast(j.has_code ? '암호를 저장했어요. 다른 폰은 새 암호로 다시 로그인해요' : '암호를 없앴어요(관리자 코드로만 입장)', 3200); }
+    catch (err) { toast(err.message); }
+  }
+  if (it.k === 'out') {
+    try { await api('/api/album/logout', { method: 'POST', json: {} }); } catch (_) {}
+    logoutLocal(); toast('로그아웃했어요');
+  }
+});
+
+// ---------- 올리기
+let upQueue = [], upBusy = false, upStop = false, upXhr = null, upDone = 0, upFail = [];
+$('#fab').addEventListener('click', async () => {
+  const it = await sheet('사진 올리기', [
+    { k: 'pick', icon: I.pick, label: '앨범에서 고르기', sub: '여러 장 한꺼번에 가능' },
+    { k: 'cam', icon: I.cam, label: '지금 찍기' },
+  ]);
+  if (!it) return;
+  $(it.k === 'cam' ? '#cam' : '#pick').click();
+});
+for (const id of ['#pick', '#cam']) $(id).addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+window.addEventListener('paste', e => { const fs = [...(e.clipboardData?.files || [])].filter(f => /^image\//.test(f.type)); if (fs.length && ME) addFiles(fs); });
+document.addEventListener('dragover', e => { if (ME) e.preventDefault(); });
+document.addEventListener('drop', e => { if (!ME) return; e.preventDefault(); addFiles([...(e.dataTransfer?.files || [])]); });
+function addFiles(files) {
+  const imgs = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(f.name));
+  if (!imgs.length) { toast('사진 파일만 올릴 수 있어요'); return; }
+  if (imgs.length < files.length) toast(`사진이 아닌 파일 ${files.length - imgs.length}개는 뺐어요`);
+  if (!upQueue.length && !upBusy) { upDone = 0; upFail = []; upStop = false; }
+  upQueue.push(...imgs);
+  pump();
+}
+function upUI(txt, frac) { const bar = $('#upbar'); bar.hidden = false; $('#upTxt').textContent = txt; $('#upFill').style.width = Math.round((frac || 0) * 100) + '%'; }
+$('#upCancel').addEventListener('click', () => { upStop = true; upQueue = []; if (upXhr) { try { upXhr.abort(); } catch (_) {} } toast('남은 사진은 올리지 않아요'); });
+async function pump() {
+  if (upBusy) return; upBusy = true;
+  const tot = () => upDone + upFail.length + upQueue.length + 1;   // 지금 올리는 1장 포함
+  while (upQueue.length && !upStop) {
+    const f = upQueue.shift(); const n = upDone + upFail.length + 1;
+    upUI(`${n}/${tot()} 준비 중 · ${f.name}`, 0);
+    try {
+      const meta = await prepImage(f);
+      const taken = (await exifTaken(f)) || f.lastModified || Date.now();
+      const qs = new URLSearchParams({ name: f.name.slice(0, 120), taken: String(Math.round(taken)), w: String(meta.w), h: String(meta.h) });
+      upUI(`${n}/${tot()} 올리는 중 · ${f.name}`, 0);
+      const j = await xhrUpload(`${SRV}/api/album/upload?${qs}`, f, fr => upUI(`${n}/${tot()} 올리는 중 · ${f.name} · ${Math.round(fr * 100)}%`, fr));
+      if (meta.thumb) { try { await xhrUpload(`${SRV}/api/album/thumb/${j.photo.id}`, meta.thumb); j.photo.thumb = true; } catch (_) {} }
+      PHOTOS.push(j.photo); PHOTOS.sort((a, b) => (b.taken - a.taken) || (b.ts - a.ts));
+      USAGE = j; upDone++;
+      paintHead(); render();
+    } catch (err) {
+      if (upStop) break;
+      upFail.push(`${f.name}: ${err.message}`);
+      if (/다시 로그인/.test(err.message)) { upQueue = []; break; }
+    }
+  }
+  upBusy = false; upXhr = null;
+  $('#upbar').hidden = true;
+  if (upDone || upFail.length) {
+    if (upFail.length) dialog({ title: `올리기 끝 — ${upDone}장 성공, ${upFail.length}장 실패`, text: upFail.slice(0, 6).join('\n') + (upFail.length > 6 ? `\n… 외 ${upFail.length - 6}장` : ''), noInput: true, okText: '확인' });
+    else toast(`${upDone}장 올렸어요`);
+  }
+  lastLoad = Date.now();
+}
+async function prepImage(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    let w = 0, h = 0, draw = null;
+    try {
+      const img = new Image(); img.src = url; await img.decode();
+      w = img.naturalWidth; h = img.naturalHeight; draw = img;
+    } catch (_) {
+      try { const bm = await createImageBitmap(file, { imageOrientation: 'from-image' }); w = bm.width; h = bm.height; draw = bm; }
+      catch (e2) { throw new Error('이 폰에서 열 수 없는 사진 형식이에요(HEIC 등). 갤러리에서 JPG로 저장해 올려 주세요'); }
+    }
+    const S = 512, sc = Math.min(1, S / Math.max(w, h, 1));
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w * sc)); c.height = Math.max(1, Math.round(h * sc));
+    const g = c.getContext('2d', { alpha: false }); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(draw, 0, 0, c.width, c.height);
+    const thumb = await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.82));
+    if (draw.close) draw.close();
+    return { w, h, thumb: thumb && thumb.size <= 400 * 1024 ? thumb : null };
+  } finally { URL.revokeObjectURL(url); }
+}
+// JPEG EXIF의 찍은 시각(DateTimeOriginal). 없으면 0 → 파일 시각으로
+async function exifTaken(file) {
+  if (!(file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name))) return 0;
+  try {
+    const d = new DataView(await file.slice(0, 196608).arrayBuffer());
+    if (d.byteLength < 4 || d.getUint16(0) !== 0xFFD8) return 0;
+    let off = 2;
+    while (off + 4 <= d.byteLength) {
+      const mk = d.getUint16(off); if ((mk & 0xFF00) !== 0xFF00) break;
+      const len = d.getUint16(off + 2);
+      if (mk === 0xFFE1 && off + 10 <= d.byteLength && d.getUint32(off + 4) === 0x45786966) {
+        const t = off + 10; const le = d.getUint16(t) === 0x4949;
+        const g16 = p => d.getUint16(p, le), g32 = p => d.getUint32(p, le);
+        const find = (ifd, tag) => { if (ifd + 2 > d.byteLength) return 0; const n = g16(ifd); for (let i = 0; i < n; i++) { const e = ifd + 2 + i * 12; if (e + 12 > d.byteLength) return 0; if (g16(e) === tag) return e; } return 0; };
+        const ascii = e => { const cnt = g32(e + 4); const p = cnt > 4 ? t + g32(e + 8) : e + 8; let s = ''; for (let i = 0; i < cnt - 1 && p + i < d.byteLength; i++) s += String.fromCharCode(d.getUint8(p + i)); return s; };
+        const ifd0 = t + g32(t + 4); let s = '';
+        const ex = find(ifd0, 0x8769);
+        if (ex) { const sub = t + g32(ex + 8); const e2 = find(sub, 0x9003) || find(sub, 0x9004); if (e2) s = ascii(e2); }
+        if (!s) { const e3 = find(ifd0, 0x0132); if (e3) s = ascii(e3); }
+        const m = /^(\d{4}):(\d\d):(\d\d)[ T](\d\d):(\d\d):(\d\d)/.exec(s);
+        if (m) { const ts = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime(); return ts > 0 ? ts : 0; }
+        return 0;
+      }
+      if (mk === 0xFFDA) break;
+      off += 2 + len;
+    }
+  } catch (_) {}
+  return 0;
+}
+
+// ---------- 뷰어
+let vList = [], vIdx = -1, vOpen = false;
+const cur = () => vList[vIdx];
+function openViewer(id) {
+  vList = visible(); vIdx = vList.findIndex(p => p.id === id); if (vIdx < 0) return;
+  vOpen = true; $('#viewer').hidden = false; $('#viewer').classList.remove('hide'); document.body.style.overflow = 'hidden';
+  pushLayer(hideViewer);
+  showCur();
+}
+function hideViewer() { if (!vOpen) return; vOpen = false; $('#viewer').hidden = true; document.body.style.overflow = ''; $('#vfull').removeAttribute('src'); $('#vth').removeAttribute('src'); }
+function closeViewer() { if (vOpen) closeTop(); }
+function showCur() {
+  const p = cur(); if (!p) { closeViewer(); return; }
+  const th = $('#vth'), full = $('#vfull');
+  th.src = thumbUrl(p.id); full.classList.remove('on'); full.src = fileUrl(p.id);
+  full.onload = () => { if (full.src === fileUrl(p.id)) full.classList.add('on'); };
+  $('#vmeta').innerHTML = `<b>${esc(p.who)}</b><span>${esc(fmtDate(dateOf(p)))} · ${esc(fmtMB(p.size))}${p.w ? ` · ${p.w}×${p.h}` : ''} · ${vIdx + 1}/${vList.length}</span>`;
+  $('#vmemo').textContent = p.memo || '';
+  $('#vPrev').style.visibility = vIdx > 0 ? '' : 'hidden'; $('#vNext').style.visibility = vIdx < vList.length - 1 ? '' : 'hidden';
+  for (const d of [1, -1]) { const n = vList[vIdx + d]; if (n) { const im = new Image(); im.src = fileUrl(n.id); } }
+}
+function step(d) { const n = vIdx + d; if (n < 0 || n >= vList.length) return; vIdx = n; showCur(); }
+$('#vClose').addEventListener('click', () => closeViewer());
+$('#vPrev').addEventListener('click', () => step(-1));
+$('#vNext').addEventListener('click', () => step(1));
+$('#vstage').addEventListener('click', e => { if (e.target.tagName === 'IMG' || e.target === e.currentTarget) $('#viewer').classList.toggle('hide'); });
+document.addEventListener('keydown', e => { if (!vOpen) return; if (e.key === 'ArrowLeft') step(-1); else if (e.key === 'ArrowRight') step(1); else if (e.key === 'Escape') closeViewer(); });
+{ // 좌우로 밀어 넘기기(세로 스크롤·핀치는 그대로)
+  let sx = 0, sy = 0, dx = 0, on = false, multi = false; const st = $('#vstage');
+  st.addEventListener('touchstart', e => { multi = e.touches.length > 1; if (multi) { on = false; return; } sx = e.touches[0].clientX; sy = e.touches[0].clientY; dx = 0; on = true; st.classList.remove('sw'); }, { passive: true });
+  st.addEventListener('touchmove', e => { if (!on || e.touches.length > 1) { on = false; st.style.transform = ''; return; } dx = e.touches[0].clientX - sx; const dy = e.touches[0].clientY - sy; if (Math.abs(dy) > Math.abs(dx) * 1.3) { on = false; st.style.transform = ''; return; } const edge = (dx > 0 && vIdx === 0) || (dx < 0 && vIdx === vList.length - 1); st.style.transform = `translateX(${edge ? dx / 3 : dx}px)`; }, { passive: true });
+  st.addEventListener('touchend', () => { if (!on) return; on = false; st.classList.add('sw'); st.style.transform = ''; if (Math.abs(dx) > 60) step(dx < 0 ? 1 : -1); });
+}
+$('#vMemo').addEventListener('click', async () => {
+  const p = cur(); if (!p) return;
+  const v = await dialog({ title: '메모', text: `${p.who} · ${fmtDate(dateOf(p))}`, value: p.memo || '', multiline: true, placeholder: '이 사진에 남길 말' });
+  if (v === null) return;
+  try { const j = await api(`/api/album/photos/${p.id}`, { method: 'POST', json: { memo: v } }); Object.assign(p, j.photo); showCur(); render(); toast('메모를 저장했어요', 1400); }
+  catch (err) { toast(err.message); }
+});
+async function fetchBlob(p) {
+  const r = await fetch(fileUrl(p.id));
+  if (!r.ok) throw new Error('사진을 받지 못했어요');
+  const b = await r.blob();
+  return new File([b], p.name || ('photo' + (p.mime === 'image/png' ? '.png' : p.mime === 'image/webp' ? '.webp' : p.mime === 'image/gif' ? '.gif' : '.jpg')), { type: p.mime || b.type });
+}
+$('#vSave').addEventListener('click', async () => {
+  const p = cur(); if (!p) return;
+  toast('원본을 받는 중…', 1500);
+  try {
+    const f = await fetchBlob(p);
+    if (navigator.canShare && navigator.canShare({ files: [f] }) && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      try { await navigator.share({ files: [f] }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const u = URL.createObjectURL(f); const a = document.createElement('a'); a.href = u; a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000);
+    toast('내려받기를 시작했어요', 1600);
+  } catch (err) { toast(err.message); }
+});
+$('#vShare').addEventListener('click', async () => {
+  const p = cur(); if (!p) return;
+  if (!navigator.share) { toast('이 브라우저는 공유를 지원하지 않아요. 저장 버튼을 써 주세요'); return; }
+  toast('원본을 받는 중…', 1500);
+  try {
+    const f = await fetchBlob(p);
+    if (navigator.canShare && navigator.canShare({ files: [f] })) await navigator.share({ files: [f], title: p.memo || '사진' });
+    else toast('이 브라우저는 사진 공유를 지원하지 않아요. 저장 버튼을 써 주세요');
+  } catch (err) { if (!(err && err.name === 'AbortError')) toast(err.message); }
+});
+$('#vDel').addEventListener('click', async () => {
+  const p = cur(); if (!p) return;
+  const ok = await dialog({ title: '이 사진을 지울까요?', text: `${p.who}이(가) 올린 사진 · ${fmtDate(dateOf(p))}\n지우면 서버에서도 사라져요(되돌릴 수 없음).`, noInput: true, okText: '지우기', danger: true });
+  if (!ok) return;
+  try {
+    const j = await api(`/api/album/photos/${p.id}`, { method: 'DELETE' });
+    PHOTOS = PHOTOS.filter(x => x.id !== p.id); USAGE = j; paintHead(); render();
+    vList = visible(); if (vIdx >= vList.length) vIdx = vList.length - 1;
+    if (vIdx < 0) closeViewer(); else showCur();
+    toast('지웠어요', 1400);
+  } catch (err) { toast(err.message); }
+});
+
+// ---------- 시작
+function measureHead() { const h = document.querySelector('header'); if (h && !$('#main').hidden) document.documentElement.style.setProperty('--hh', h.offsetHeight + 'px'); }
+window.addEventListener('resize', measureHead);
+paintWho();
+if (TOKEN) enter().catch(() => showLogin()); else showLogin();
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
+})();
+</script>
+</body>
+</html>
