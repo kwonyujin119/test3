@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
 <title>유진·아름 사진 저장소</title>
-<meta name="description" content="유진·아름 둘만의 사진 저장소 — 암호로 들어가 사진을 올리고 봅니다. 사진은 PC 서버에만 저장됩니다.">
-<link rel="manifest" href="manifest.webmanifest?v=1">
+<meta name="description" content="유진·아름 둘만의 사진 저장소 — 접속코드로 들어가 사진을 올리고 봅니다. 사진은 PC 서버에만 저장됩니다.">
+<link rel="manifest" href="manifest.webmanifest?v=2">
 <meta name="theme-color" content="#0B1B3F">
-<link rel="icon" href="icons/icon-192.png?v=1" type="image/png" sizes="192x192">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=1">
+<link rel="icon" href="icons/icon-192.png?v=2" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=2">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,38 +26,34 @@ input,textarea{font:inherit}
 [hidden]{display:none!important}
 .screen{min-height:100%}
 /* ---------- 로그인 ---------- */
-#login{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:calc(24px + var(--sat)) 20px calc(24px + var(--sab));background:linear-gradient(180deg,var(--navy) 0 46%,var(--bg) 46%)}
-.lcard{width:100%;max-width:380px;background:var(--card);border-radius:22px;padding:26px 22px 22px;box-shadow:0 18px 50px rgba(11,27,63,.25)}
-.logo{display:grid;place-items:center;width:84px;height:84px;margin:-70px auto 12px;border-radius:24px;background:var(--navy);box-shadow:0 8px 24px rgba(0,0,0,.25)}
-.logo img{width:84px;height:84px;border-radius:24px}
+#login{display:grid;grid-template-rows:1fr 1fr;height:100dvh;min-height:100dvh;background:#fff}
+.ltop{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(12px + var(--sat)) 20px 12px;overflow:auto}
+.lcard{width:100%;max-width:380px}
+.logo{display:grid;place-items:center;width:64px;height:64px;margin:0 auto 10px;border-radius:18px;box-shadow:0 6px 18px rgba(11,27,63,.25)}
+.logo img{width:64px;height:64px;border-radius:18px;display:block}
 h1{margin:0;text-align:center;font-size:21px;letter-spacing:-.2px}
-.sub{margin:6px 0 20px;text-align:center;color:var(--muted);font-size:13px}
-.who{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.who button{display:flex;align-items:center;gap:10px;padding:12px;border:2px solid var(--line);border-radius:14px;background:#fff;font-weight:700;font-size:16px}
-.who button .av{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--ocean-soft);color:var(--ocean);font-weight:800}
-.who button[aria-pressed=true]{border-color:var(--navy);background:var(--yellow-soft)}
-.who button[aria-pressed=true] .av{background:var(--navy);color:var(--yellow)}
+.sub{margin:4px 0 16px;text-align:center;color:var(--muted);font-size:13px}
+.lbot{position:relative;overflow:hidden;background:var(--navy)}
+.lbot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+@media(max-height:560px){.logo{display:none}.sub{display:none}}
 .field{display:flex;align-items:center;gap:8px;border:2px solid var(--line);border-radius:14px;padding:0 6px 0 14px;background:#fff}
 .field:focus-within{border-color:var(--ocean)}
-.field input{flex:1;min-width:0;border:0;outline:0;padding:13px 0;font-size:17px;letter-spacing:2px;background:transparent}
+.field input{flex:1;min-width:0;border:0;outline:0;padding:13px 0;font-size:20px;letter-spacing:6px;text-align:center;background:transparent}
 .field button{padding:8px 10px;color:var(--muted);font-size:13px}
-.btn{display:block;width:100%;margin-top:14px;padding:14px;border-radius:14px;background:var(--navy);color:var(--yellow);font-weight:800;font-size:16px}
+.btn{display:block;width:100%;margin-top:12px;padding:14px;border-radius:14px;background:var(--navy);color:var(--yellow);font-weight:800;font-size:16px}
 .btn:disabled{opacity:.6}
 .msg{min-height:20px;margin:10px 2px 0;font-size:13px;color:var(--danger);text-align:center}
 .msg.ok{color:var(--ok)}
-.tiny{margin-top:14px;text-align:center;font-size:12px;color:var(--muted)}
+.tiny{margin-top:10px;text-align:center;font-size:12px;color:var(--muted)}
 .tiny button{color:var(--ocean);text-decoration:underline}
 /* ---------- 메인 ---------- */
 header{position:sticky;top:0;z-index:5;background:var(--navy);color:#fff;padding:calc(10px + var(--sat)) 12px 0}
-.hrow{display:flex;align-items:center;gap:8px;height:48px}
+.hrow{display:flex;align-items:center;gap:8px;height:52px;padding-bottom:6px}
 .hrow .ttl{flex:1;min-width:0;font-weight:800;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hrow .ttl small{display:block;font-weight:500;font-size:12px;color:#C9D3EA}
 .ib{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;color:#fff}
 .ib:active{background:rgba(255,255,255,.12)}
 .ib svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.chips{display:flex;gap:8px;padding:8px 0 10px}
-.chips button{padding:7px 14px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font-weight:600;font-size:13px}
-.chips button[aria-pressed=true]{background:var(--yellow);color:var(--navy)}
 main{padding:6px 6px calc(96px + var(--sab))}
 .month{position:sticky;top:var(--hh,106px);z-index:2;margin:10px 4px 6px;display:flex;align-items:baseline;gap:8px;padding:6px 8px;border-radius:10px;background:rgba(243,244,246,.92);backdrop-filter:blur(6px);font-weight:800;font-size:15px}
 .month small{font-weight:500;color:var(--muted);font-size:12px}
@@ -66,8 +62,6 @@ main{padding:6px 6px calc(96px + var(--sab))}
 @media(min-width:820px){.grid{grid-template-columns:repeat(6,1fr)}main{padding-left:12px;padding-right:12px}}
 .tile{position:relative;aspect-ratio:1;overflow:hidden;background:#DDE2EA;border-radius:4px}
 .tile img{width:100%;height:100%;object-fit:cover;display:block}
-.tile .w{position:absolute;left:5px;bottom:5px;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;font-size:11px;font-weight:800;color:var(--navy);background:var(--yellow);box-shadow:0 1px 3px rgba(0,0,0,.3)}
-.tile .w.a{background:#fff;color:var(--ocean)}
 .tile .m{position:absolute;right:5px;top:5px;width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 1.5px var(--ocean)}
 .empty{margin:60px 20px;text-align:center;color:var(--muted)}
 .empty b{display:block;margin-bottom:6px;color:var(--ink);font-size:17px}
@@ -133,24 +127,23 @@ main{padding:6px 6px calc(96px + var(--sab))}
 
 <!-- 로그인 -->
 <div id="login" class="screen">
-  <div class="lcard">
-    <div class="logo"><img src="icons/icon-192.png?v=1" alt=""></div>
-    <h1>유진 · 아름 사진 저장소</h1>
-    <p class="sub">둘만 보는 곳이에요. 사진은 PC 서버에만 저장돼요.</p>
-    <div class="who" id="whoPick">
-      <button type="button" data-who="유진" aria-pressed="false"><span class="av">유</span>유진</button>
-      <button type="button" data-who="아름" aria-pressed="false"><span class="av">아</span>아름</button>
+  <div class="ltop">
+    <div class="lcard">
+      <div class="logo"><img src="icons/icon-192.png?v=2" alt=""></div>
+      <h1>유진 · 아름 사진 저장소</h1>
+      <p class="sub">접속코드를 입력하세요. 사진은 PC 서버에만 저장돼요.</p>
+      <form id="loginForm" autocomplete="off">
+        <div class="field">
+          <input id="code" type="password" inputmode="numeric" placeholder="접속코드" autocomplete="current-password" enterkeyhint="go">
+          <button type="button" id="eye">보기</button>
+        </div>
+        <button class="btn" id="goBtn" type="submit">들어가기</button>
+      </form>
+      <div class="msg" id="lmsg"></div>
+      <div class="tiny" id="srvInfo"></div>
     </div>
-    <form id="loginForm" autocomplete="off">
-      <div class="field">
-        <input id="code" type="password" inputmode="text" placeholder="암호" autocomplete="current-password" enterkeyhint="go">
-        <button type="button" id="eye">보기</button>
-      </div>
-      <button class="btn" id="goBtn" type="submit">들어가기</button>
-    </form>
-    <div class="msg" id="lmsg"></div>
-    <div class="tiny" id="srvInfo"></div>
   </div>
+  <div class="lbot"><img src="img/login.jpg?v=2" alt=""></div>
 </div>
 
 <!-- 메인 -->
@@ -160,11 +153,6 @@ main{padding:6px 6px calc(96px + var(--sab))}
       <div class="ttl">유진 · 아름 사진 저장소<small id="hsub">불러오는 중…</small></div>
       <button class="ib" id="refreshBtn" aria-label="새로고침"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></button>
       <button class="ib" id="menuBtn" aria-label="메뉴"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></svg></button>
-    </div>
-    <div class="chips" id="chips">
-      <button data-f="all" aria-pressed="true">전체</button>
-      <button data-f="유진" aria-pressed="false">유진</button>
-      <button data-f="아름" aria-pressed="false">아름</button>
     </div>
   </header>
   <main id="grid"></main>
@@ -203,7 +191,7 @@ main{padding:6px 6px calc(96px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v1';
+const VER = 'v2';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -213,8 +201,7 @@ const DEF_SRV = 'https://app.sachil47.com';
 const qsSrv = new URLSearchParams(location.search).get('srv');
 let SRV = (qsSrv || LS.get('album.srv') || DEF_SRV).replace(/\/+$/, '');
 if (qsSrv) LS.set('album.srv', SRV);
-let TOKEN = LS.get('album.token') || '', ME = null, PHOTOS = [], FILTER = 'all', USAGE = null, lastLoad = 0;
-let who = LS.get('album.who') || '';
+let TOKEN = LS.get('album.token') || '', ME = null, PHOTOS = [], USAGE = null, lastLoad = 0;
 
 // ---------- 서버 호출
 async function api(path, { method = 'GET', body = null, json = null, timeout = 30000 } = {}) {
@@ -314,18 +301,15 @@ function dialog({ title, text, value = '', multiline = false, placeholder = '', 
 }
 
 // ---------- 로그인
-function paintWho() { document.querySelectorAll('#whoPick button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.who === who))); }
-$('#whoPick').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; who = b.dataset.who; LS.set('album.who', who); paintWho(); $('#code').focus(); });
 $('#eye').addEventListener('click', () => { const i = $('#code'); i.type = i.type === 'password' ? 'text' : 'password'; $('#eye').textContent = i.type === 'password' ? '보기' : '숨김'; });
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
   const m = $('#lmsg'); m.className = 'msg';
-  if (!who) { m.textContent = '먼저 누구인지 골라 주세요'; return; }
   const code = $('#code').value.trim();
-  if (!code) { m.textContent = '암호를 입력해 주세요'; return; }
+  if (!code) { m.textContent = '접속코드를 입력해 주세요'; return; }
   $('#goBtn').disabled = true; m.textContent = '확인하는 중…'; m.className = 'msg ok';
   try {
-    const j = await api('/api/album/login', { method: 'POST', json: { who, code } });
+    const j = await api('/api/album/login', { method: 'POST', json: { code } });
     TOKEN = j.token; LS.set('album.token', TOKEN);
     $('#code').value = '';
     await enter();
@@ -337,7 +321,7 @@ async function pingInfo() {
   try {
     const j = await api('/api/album/ping', { timeout: 8000 });
     if (TOKEN && !ME) { try { await enter(); return; } catch (_) {} }
-    el.innerHTML = (j.has_code ? '' : '아직 앨범 암호가 없어요 — 관리자(교수) 코드로 들어와 ⋯ 메뉴에서 정해 주세요<br>') + `서버 ${esc(j.version)} · <button type="button" id="chgSrv">서버 주소</button>`;
+    el.innerHTML = `서버 ${esc(j.version)} · <button type="button" id="chgSrv">서버 주소</button>`;
   } catch (err) {
     el.innerHTML = `${esc(err.message)}<br><button type="button" id="chgSrv">서버 주소 바꾸기</button>`;
   }
@@ -352,7 +336,7 @@ async function changeSrv() {
   toast('서버 주소를 바꿨어요'); pingInfo();
 }
 function logoutLocal() { TOKEN = ''; ME = null; PHOTOS = []; LS.del('album.token'); if (vOpen) hideViewer(); showLogin(); }
-function showLogin() { $('#main').hidden = true; $('#viewer').hidden = true; $('#login').hidden = false; paintWho(); pingInfo(); }
+function showLogin() { $('#main').hidden = true; $('#viewer').hidden = true; $('#login').hidden = false; pingInfo(); }
 
 // ---------- 메인
 async function enter() {
@@ -364,7 +348,7 @@ async function enter() {
 }
 function paintHead() {
   if (!USAGE) return;
-  $('#hsub').textContent = `${ME ? ME.who + ' 로그인 · ' : ''}사진 ${USAGE.count}장 · ${fmtMB(USAGE.bytes)} 사용`;
+  $('#hsub').textContent = `사진 ${USAGE.count}장 · ${fmtMB(USAGE.bytes)} 사용`;
 }
 async function load(quiet) {
   try {
@@ -373,11 +357,11 @@ async function load(quiet) {
     paintHead(); render();
   } catch (err) { if (!quiet) toast(err.message); }
 }
-const visible = () => FILTER === 'all' ? PHOTOS : PHOTOS.filter(p => p.who === FILTER);
+const visible = () => PHOTOS;
 function render() {
   const list = visible(); const root = $('#grid');
   if (!list.length) {
-    root.innerHTML = `<div class="empty"><b>${FILTER === 'all' ? '아직 사진이 없어요' : FILTER + ' 사진이 아직 없어요'}</b>오른쪽 아래 + 를 눌러 올려 보세요</div>`;
+    root.innerHTML = `<div class="empty"><b>아직 사진이 없어요</b>오른쪽 아래 + 를 눌러 올려 보세요</div>`;
     return;
   }
   const groups = new Map();
@@ -385,12 +369,11 @@ function render() {
   let html = '';
   for (const [k, arr] of groups) {
     html += `<div class="month">${esc(k)}<small>${arr.length}장</small></div><div class="grid">`;
-    for (const p of arr) html += `<button type="button" class="tile" data-id="${p.id}"><img loading="lazy" decoding="async" src="${thumbUrl(p.id)}" alt=""><span class="w ${p.who === '아름' ? 'a' : ''}">${esc(p.who[0])}</span>${p.memo ? '<span class="m"></span>' : ''}</button>`;
+    for (const p of arr) html += `<button type="button" class="tile" data-id="${p.id}"><img loading="lazy" decoding="async" src="${thumbUrl(p.id)}" alt="">${p.memo ? '<span class="m"></span>' : ''}</button>`;
     html += '</div>';
   }
   root.innerHTML = html;
 }
-$('#chips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; FILTER = b.dataset.f; document.querySelectorAll('#chips button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); render(); window.scrollTo(0, 0); });
 $('#grid').addEventListener('click', e => { const t = e.target.closest('.tile'); if (!t) return; openViewer(t.dataset.id); });
 $('#refreshBtn').addEventListener('click', async () => { $('#refreshBtn').style.opacity = '.5'; await load(); $('#refreshBtn').style.opacity = ''; toast('새로 불러왔어요', 1200); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && TOKEN && ME && Date.now() - lastLoad > 60000 && !upQueue.length) load(true); });
@@ -408,20 +391,20 @@ const I = {
 $('#menuBtn').addEventListener('click', async () => {
   const items = [
     { k: 'usage', icon: I.disk, label: '저장 공간', sub: USAGE ? `${fmtMB(USAGE.bytes)} / ${fmtMB(USAGE.max_bytes)} 사용 · 사진 ${USAGE.count}장` : '' },
-    ...(ME && ME.admin ? [{ k: 'code', icon: I.key, label: ME.has_code ? '앨범 암호 바꾸기' : '앨범 암호 정하기', sub: ME.has_code ? '두 사람이 쓰는 암호 · 바꾸면 다른 폰은 다시 로그인' : '아직 없어요 — 정하면 관리자 코드 없이 들어올 수 있어요' }] : []),
+    ...(ME && ME.admin ? [{ k: 'code', icon: I.key, label: ME.has_code ? '접속코드 바꾸기' : '접속코드 정하기', sub: ME.has_code ? '둘이 쓰는 접속코드 · 바꾸면 다른 폰은 다시 로그인' : '아직 없어요 — 정하면 관리자 코드 없이 들어올 수 있어요' }] : []),
     { k: 'home', icon: I.home, label: '홈 화면에 추가하는 법', sub: '앱처럼 바로 열기' },
     { k: 'srv', icon: I.srv, label: '서버 주소', sub: SRV.replace(/^https?:\/\//, '') },
     { k: 'out', icon: I.out, label: '로그아웃', red: true },
   ];
-  const it = await sheet(`${ME ? ME.who : ''} · 앨범 ${VER} · 서버 ${ME ? ME.version : ''}`, items);
+  const it = await sheet(`앨범 ${VER} · 서버 ${ME ? ME.version : ''}`, items);
   if (!it) return;
   if (it.k === 'usage') toast(items[0].sub, 3000);
   if (it.k === 'srv') changeSrv();
   if (it.k === 'home') dialog({ title: '홈 화면에 추가', text: '갤럭시(크롬·삼성인터넷): 메뉴(⋮ 또는 ≡) → "홈 화면에 추가"\n아이폰(사파리): 공유(□↑) → "홈 화면에 추가"\n추가하면 앱처럼 아이콘으로 바로 열려요.', noInput: true, okText: '알겠어요' });
   if (it.k === 'code') {
-    const v = await dialog({ title: ME.has_code ? '앨범 암호 바꾸기' : '앨범 암호 정하기', text: '4자 이상. 유진·아름 둘 다 이 암호로 들어와요. 비워 두고 저장하면 암호를 없애요(관리자 코드로만 입장).', password: true, placeholder: '새 암호', okText: '저장' });
+    const v = await dialog({ title: ME.has_code ? '접속코드 바꾸기' : '접속코드 정하기', text: '4자 이상. 둘 다 이 코드로 들어와요. 비워 두고 저장하면 코드를 없애요(관리자 코드로만 입장).', password: true, placeholder: '새 접속코드', okText: '저장' });
     if (v === null) return;
-    try { const j = await api('/api/album/code', { method: 'POST', json: { code: v.trim() } }); ME.has_code = j.has_code; toast(j.has_code ? '암호를 저장했어요. 다른 폰은 새 암호로 다시 로그인해요' : '암호를 없앴어요(관리자 코드로만 입장)', 3200); }
+    try { const j = await api('/api/album/code', { method: 'POST', json: { code: v.trim() } }); ME.has_code = j.has_code; toast(j.has_code ? '접속코드를 저장했어요. 다른 폰은 새 코드로 다시 로그인해요' : '접속코드를 없앴어요(관리자 코드로만 입장)', 3200); }
     catch (err) { toast(err.message); }
   }
   if (it.k === 'out') {
@@ -549,7 +532,7 @@ function showCur() {
   const th = $('#vth'), full = $('#vfull');
   th.src = thumbUrl(p.id); full.classList.remove('on'); full.src = fileUrl(p.id);
   full.onload = () => { if (full.src === fileUrl(p.id)) full.classList.add('on'); };
-  $('#vmeta').innerHTML = `<b>${esc(p.who)}</b><span>${esc(fmtDate(dateOf(p)))} · ${esc(fmtMB(p.size))}${p.w ? ` · ${p.w}×${p.h}` : ''} · ${vIdx + 1}/${vList.length}</span>`;
+  $('#vmeta').innerHTML = `<b>${esc(fmtDate(dateOf(p)))}</b><span>${esc(fmtMB(p.size))}${p.w ? ` · ${p.w}×${p.h}` : ''} · ${vIdx + 1}/${vList.length}</span>`;
   $('#vmemo').textContent = p.memo || '';
   $('#vPrev').style.visibility = vIdx > 0 ? '' : 'hidden'; $('#vNext').style.visibility = vIdx < vList.length - 1 ? '' : 'hidden';
   for (const d of [1, -1]) { const n = vList[vIdx + d]; if (n) { const im = new Image(); im.src = fileUrl(n.id); } }
@@ -568,7 +551,7 @@ document.addEventListener('keydown', e => { if (!vOpen) return; if (e.key === 'A
 }
 $('#vMemo').addEventListener('click', async () => {
   const p = cur(); if (!p) return;
-  const v = await dialog({ title: '메모', text: `${p.who} · ${fmtDate(dateOf(p))}`, value: p.memo || '', multiline: true, placeholder: '이 사진에 남길 말' });
+  const v = await dialog({ title: '메모', text: fmtDate(dateOf(p)), value: p.memo || '', multiline: true, placeholder: '이 사진에 남길 말' });
   if (v === null) return;
   try { const j = await api(`/api/album/photos/${p.id}`, { method: 'POST', json: { memo: v } }); Object.assign(p, j.photo); showCur(); render(); toast('메모를 저장했어요', 1400); }
   catch (err) { toast(err.message); }
@@ -603,7 +586,7 @@ $('#vShare').addEventListener('click', async () => {
 });
 $('#vDel').addEventListener('click', async () => {
   const p = cur(); if (!p) return;
-  const ok = await dialog({ title: '이 사진을 지울까요?', text: `${p.who}이(가) 올린 사진 · ${fmtDate(dateOf(p))}\n지우면 서버에서도 사라져요(되돌릴 수 없음).`, noInput: true, okText: '지우기', danger: true });
+  const ok = await dialog({ title: '이 사진을 지울까요?', text: `${fmtDate(dateOf(p))}\n지우면 서버에서도 사라져요(되돌릴 수 없음).`, noInput: true, okText: '지우기', danger: true });
   if (!ok) return;
   try {
     const j = await api(`/api/album/photos/${p.id}`, { method: 'DELETE' });
@@ -617,7 +600,6 @@ $('#vDel').addEventListener('click', async () => {
 // ---------- 시작
 function measureHead() { const h = document.querySelector('header'); if (h && !$('#main').hidden) document.documentElement.style.setProperty('--hh', h.offsetHeight + 'px'); }
 window.addEventListener('resize', measureHead);
-paintWho();
 if (TOKEN) enter().catch(() => showLogin()); else showLogin();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
 })();
