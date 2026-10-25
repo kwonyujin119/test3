@@ -195,7 +195,7 @@ main{padding:6px 6px calc(96px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v3';
+const VER = 'v4';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -203,8 +203,11 @@ const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { ret
              del: k => { try { localStorage.removeItem(k); } catch (_) {} } };
 const DEF_SRV = 'https://app.sachil47.com';
 const qsSrv = new URLSearchParams(location.search).get('srv');
+// 서버 주소는 PC 서버(app.sachil47.com)여야 한다. 이 페이지 자신의 주소(github.io)나 http(s)가 아닌 값은 버리고 기본값으로
+function badSrv(u) { try { const x = new URL(u); return x.origin === location.origin || !/^https?:$/.test(x.protocol) || /github\.io$/i.test(x.hostname); } catch (_) { return true; } }
 let SRV = (qsSrv || LS.get('album.srv') || DEF_SRV).replace(/\/+$/, '');
-if (qsSrv) LS.set('album.srv', SRV);
+if (badSrv(SRV)) { SRV = DEF_SRV; LS.del('album.srv'); }
+else if (qsSrv) LS.set('album.srv', SRV);
 let TOKEN = LS.get('album.token') || '', ME = null, PHOTOS = [], USAGE = null, lastLoad = 0;
 
 // ---------- 서버 호출
@@ -321,8 +324,13 @@ $('#loginForm').addEventListener('submit', async e => {
   } catch (err) { m.className = 'msg'; m.textContent = err.message; }
   $('#goBtn').disabled = false;
 });
+let pingRetried = false;
 async function pingInfo() {
   const el = $('#srvInfo');
+  if (SRV !== DEF_SRV && !pingRetried) {   // 바뀐 주소가 응답하지 않으면 기본 주소로 되돌린다
+    try { await api('/api/album/ping', { timeout: 8000 }); }
+    catch (_) { pingRetried = true; SRV = DEF_SRV; LS.del('album.srv'); toast('서버 주소를 기본값(app.sachil47.com)으로 되돌렸어요', 3000); }
+  }
   try {
     const j = await api('/api/album/ping', { timeout: 8000 });
     if (TOKEN && !ME) { try { await enter(); return; } catch (_) {} }
@@ -347,7 +355,15 @@ async function changeSrv() {
   if (v === null) return;
   const nv = (v.trim() || DEF_SRV).replace(/\/+$/, '');
   if (!/^https?:\/\//.test(nv)) { toast('http:// 또는 https:// 로 시작해야 해요'); return; }
-  SRV = nv; if (nv === DEF_SRV) LS.del('album.srv'); else LS.set('album.srv', nv);
+  if (badSrv(nv)) { toast('그 주소는 이 페이지 자신이에요. PC 서버 주소(app.sachil47.com)를 넣어야 해요', 3200); return; }
+  if (nv !== DEF_SRV) {   // 저장 전에 진짜 SACHIL 서버인지 확인
+    try {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
+      const r = await fetch(nv + '/api/me', { headers: { 'X-SACHIL': '1' }, cache: 'no-store', signal: ctl.signal }); clearTimeout(t);
+      const me = await r.json(); if (!me || me.server !== 'sachil') throw new Error();
+    } catch (_) { toast('그 주소에서 SACHIL 서버 응답이 없어요. 저장하지 않았어요', 3200); return; }
+  }
+  SRV = nv; pingRetried = false; if (nv === DEF_SRV) LS.del('album.srv'); else LS.set('album.srv', nv);
   toast('서버 주소를 바꿨어요'); pingInfo();
 }
 function logoutLocal() { TOKEN = ''; ME = null; PHOTOS = []; LS.del('album.token'); if (vOpen) hideViewer(); showLogin(); }
