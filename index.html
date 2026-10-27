@@ -134,7 +134,7 @@ main{padding:6px 6px calc(96px + var(--sab))}
     <div class="lcard">
       <div class="logo"><img src="icons/icon-192.png?v=2" alt=""></div>
       <h1>유진 · 아름 사진 저장소</h1>
-      <p class="sub">접속코드를 입력하세요. 사진은 PC 서버에만 저장돼요.</p>
+      <p class="sub">접속코드를 입력하세요. 사진은 우리 PC에만 저장돼요.</p>
       <form id="loginForm" autocomplete="off">
         <div class="field">
           <input id="code" type="password" inputmode="numeric" placeholder="접속코드" autocomplete="current-password" enterkeyhint="go">
@@ -195,31 +195,32 @@ main{padding:6px 6px calc(96px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v6';
+const VER = 'v7';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
              set: (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} },
              del: k => { try { localStorage.removeItem(k); } catch (_) {} } };
-const SRV_CANDIDATES = ['https://album.sachil47.com', 'https://app.sachil47.com', 'http://localhost:4848'];   // 별도 앨범 서버 → SACHIL 서버(15.8+) → 서버 PC 자신에서 열었을 때
+const SELF_SERVED = /^https?:$/.test(location.protocol) && !/github\.io$/i.test(location.hostname);   // 앨범 서버가 직접 내보낸 화면이면 서버 = 지금 주소
+const SRV_CANDIDATES = SELF_SERVED ? [location.origin] : ['http://localhost:4848'];   // github.io에서 열었을 때는 같은 PC의 서버만 찾을 수 있음
 const DEF_SRV = SRV_CANDIDATES[0];
 const qsSrv = new URLSearchParams(location.search).get('srv');
-// 서버 주소는 PC 서버(app.sachil47.com)여야 한다. 이 페이지 자신의 주소(github.io)나 http(s)가 아닌 값은 버리고 기본값으로
-function badSrv(u) { try { const x = new URL(u); return x.origin === location.origin || !/^https?:$/.test(x.protocol) || /github\.io$/i.test(x.hostname) || (x.protocol === 'http:' && !/^(localhost|127\.0\.0\.1|192\.168\.|10\.)/.test(x.hostname)); } catch (_) { return true; } }
+// 서버 주소는 사진 저장소 서버(http://PC주소:4848)여야 한다. github.io 주소나 http(s)가 아닌 값, 집 밖 http 주소는 버리고 기본값으로
+function badSrv(u) { try { const x = new URL(u); return !/^https?:$/.test(x.protocol) || /github\.io$/i.test(x.hostname) || (x.protocol === 'http:' && !/^(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(x.hostname)); } catch (_) { return true; } }
 let SRV = (qsSrv || LS.get('album.srv') || DEF_SRV).replace(/\/+$/, '');
-if (badSrv(SRV)) { SRV = DEF_SRV; LS.del('album.srv'); }
+if (badSrv(SRV) || SELF_SERVED) { SRV = DEF_SRV; LS.del('album.srv'); }
 else if (qsSrv) LS.set('album.srv', SRV);
 let TOKEN = LS.get('album.token') || '', ME = null, PHOTOS = [], USAGE = null, lastLoad = 0;
 
 // ---------- 서버 호출
 async function api(path, { method = 'GET', body = null, json = null, timeout = 30000 } = {}) {
-  const h = { 'X-SACHIL': '1' };
+  const h = { 'X-ALBUM': '1' };
   if (TOKEN) h.Authorization = 'Bearer ' + TOKEN;
   if (json) { h['Content-Type'] = 'application/json'; body = JSON.stringify(json); }
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), timeout);
   let r;
   try { r = await fetch(SRV + path, { method, headers: h, body, signal: ctl.signal, cache: 'no-store' }); }
-  catch (e) { clearTimeout(t); throw new Error('서버에 연결할 수 없어요. PC 서버가 켜져 있는지 확인해 주세요'); }
+  catch (e) { clearTimeout(t); throw new Error(SELF_SERVED ? '서버에 연결할 수 없어요. PC의 사진 저장소 서버 창이 켜져 있는지 확인해 주세요' : '서버에 연결할 수 없어요. 폰에서는 서버 PC 창에 적힌 주소(http://…:4848)로 열어 주세요'); }
   clearTimeout(t);
   let j = null; try { j = await r.json(); } catch (_) {}
   if (r.status === 401 && TOKEN && path !== '/api/album/login') { logoutLocal(); throw new Error('다시 로그인해 주세요'); }
@@ -231,7 +232,7 @@ function xhrUpload(url, blob, onProgress) {
   return new Promise((ok, no) => {
     const x = new XMLHttpRequest();
     x.open('POST', url);
-    x.setRequestHeader('X-SACHIL', '1');
+    x.setRequestHeader('X-ALBUM', '1');
     x.setRequestHeader('Authorization', 'Bearer ' + TOKEN);
     x.timeout = 600000;
     x.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
@@ -328,7 +329,7 @@ $('#loginForm').addEventListener('submit', async e => {
 let pingRetried = false;
 async function pingInfo() {
   const el = $('#srvInfo');
-  if (!pingRetried) {   // 지금 주소가 응답하지 않으면 기본 후보(앨범 서버 → SACHIL 서버)를 차례로 찾는다
+  if (!pingRetried) {   // 지금 주소가 응답하지 않으면 기본 후보를 차례로 찾는다
     try { await api('/api/album/ping', { timeout: 8000 }); }
     catch (_) {
       pingRetried = true;
@@ -348,29 +349,28 @@ async function pingInfo() {
     let why = err.message;
     try {   // 앨범 주소는 없어도 /api/me 는 모든 버전에 있다 → 서버 버전으로 원인을 가린다
       const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
-      const r = await fetch(SRV + '/api/me', { headers: { 'X-SACHIL': '1' }, cache: 'no-store', signal: ctl.signal }); clearTimeout(t);
+      const r = await fetch(SRV + '/api/me', { cache: 'no-store', signal: ctl.signal }); clearTimeout(t);
       let me = null; try { me = await r.json(); } catch (_) {}
-      if (me && (me.server === 'sachil' || me.server === 'album')) {
-        const v = String(me.version || ''); const [a, b] = v.split('.').map(Number);
-        why = (a < 15 || (a === 15 && b < 8)) ? `PC 서버가 아직 ${v}이에요. 앨범은 서버 15.8부터 돼요 — test 저장소 PR #219를 머지하면 5~10분 안에 자동 업데이트돼요` : `서버 ${v}인데 앨범 응답이 이상해요: ${err.message}`;
-      } else why = `서버 응답이 이상해요 (HTTP ${r.status}, ${SRV.replace(/^https?:\/\//, '')}) — 서버 주소가 album.sachil47.com(또는 app.sachil47.com)인지 확인하세요`;
+      if (me && me.server === 'album') {
+        why = `서버 ${me.version || ''}인데 앨범 응답이 이상해요: ${err.message}`;
+      } else why = `서버 응답이 이상해요 (HTTP ${r.status}, ${SRV.replace(/^https?:\/\//, '')}) — 사진 저장소 서버 주소가 맞는지 확인하세요`;
     } catch (_) {}
     el.innerHTML = `<span class="msg warn" style="display:block;min-height:0;margin:0 0 6px">${esc(why)}</span><button type="button" id="chgSrv">서버 주소 바꾸기</button>`;
   }
   const b = $('#chgSrv'); if (b) b.addEventListener('click', changeSrv);
 }
 async function changeSrv() {
-  const v = await dialog({ title: '서버 주소', text: '보통은 바꿀 필요가 없어요. 비우면 기본 주소(album.sachil47.com, 없으면 app.sachil47.com)로 돌아가요.', value: SRV === DEF_SRV ? '' : SRV, placeholder: DEF_SRV, okText: '바꾸기' });
+  const v = await dialog({ title: '서버 주소', text: '서버 PC의 검은 창에 적힌 주소(예: http://192.168.0.10:4848)를 넣어요. 서버가 보여 주는 화면에서는 바꿀 필요가 없어요.', value: SRV === DEF_SRV ? '' : SRV, placeholder: 'http://192.168.0.10:4848', okText: '바꾸기' });
   if (v === null) return;
   const nv = (v.trim() || DEF_SRV).replace(/\/+$/, '');
   if (!/^https?:\/\//.test(nv)) { toast('http:// 또는 https:// 로 시작해야 해요'); return; }
-  if (badSrv(nv)) { toast('그 주소는 이 페이지 자신이에요. PC 서버 주소(album.sachil47.com)를 넣어야 해요', 3200); return; }
-  if (nv !== DEF_SRV) {   // 저장 전에 진짜 SACHIL 서버인지 확인
+  if (badSrv(nv)) { toast('서버 PC의 창에 적힌 주소(http://…:4848)를 넣어야 해요', 3200); return; }
+  if (nv !== DEF_SRV) {   // 저장 전에 진짜 사진 저장소 서버인지 확인
     try {
       const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
-      const r = await fetch(nv + '/api/me', { headers: { 'X-SACHIL': '1' }, cache: 'no-store', signal: ctl.signal }); clearTimeout(t);
-      const me = await r.json(); if (!me || !['sachil', 'album'].includes(me.server)) throw new Error();
-    } catch (_) { toast('그 주소에서 SACHIL 서버 응답이 없어요. 저장하지 않았어요', 3200); return; }
+      const r = await fetch(nv + '/api/me', { cache: 'no-store', signal: ctl.signal }); clearTimeout(t);
+      const me = await r.json(); if (!me || me.server !== 'album') throw new Error();
+    } catch (_) { toast('그 주소에서 사진 저장소 서버 응답이 없어요. 저장하지 않았어요', 3200); return; }
   }
   SRV = nv; pingRetried = false; if (nv === DEF_SRV) LS.del('album.srv'); else LS.set('album.srv', nv);
   toast('서버 주소를 바꿨어요'); pingInfo();

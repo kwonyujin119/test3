@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 r"""
-유진·아름 사진 저장소 — 별도 서버 (SACHIL:47 서버와 무관, 표준 라이브러리만 사용)
+유진·아름 사진 저장소 — 독립 서버 (다른 프로그램·도메인 불필요, 파이썬 표준 라이브러리만 사용)
 
   폴더 구성(이 파일이 있는 곳 기준)
     data\config.json   설정(포트·접속코드 해시·허용 주소·사진 폴더)
@@ -8,12 +8,14 @@ r"""
     사진\               사진 원본(<id>) + 미리보기(<id>.t.jpg)  ← config.json의 photos_dir로 바꿀 수 있음
 
   실행: start.bat (자동 업데이트 포함)  /  접속코드 바꾸기: set-code.bat 또는 --set-code 새코드
-  화면: https://kwonyujin119.github.io/test3/  (서버 주소를 이 서버의 공개 주소로)
+  화면: 이 서버가 직접 보여 준다 — 같은 와이파이의 폰·PC에서 http://<이 PC 주소>:4848 을 연다(도메인 불필요)
+        (화면 파일 index.html 등은 이 폴더의 상위 폴더 또는 web\ 폴더에서 찾는다)
+  바깥(이동통신)에서도 쓰려면: 이 폴더에 cloudflared.exe 를 두면 켤 때마다 임시 공개 주소(trycloudflare.com)를 만들어 보여 준다(선택)
 """
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '1.0'
+VERSION = '1.1'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -45,11 +47,10 @@ def load_conf():
         'photos_dir': os.path.join(BASE, '사진'),       # 사진이 저장되는 폴더(다른 드라이브·폴더로 바꿀 수 있음)
         'max_store_mb': 20480,                          # 사진 총량(MB)
         'allowed_origins': ['https://kwonyujin119.github.io'],   # 화면(github.io)에서 오는 요청 허용
-        'page_url': 'https://kwonyujin119.github.io/test3/',     # 화면 주소(안내용)
-        'public_url': '',                               # 이 서버의 공개 주소(예: https://album.sachil47.com) — 안내용
         'auto_update': True,                            # GitHub의 server/album_server.py가 새 버전이면 스스로 교체하고 다시 켬
         'update_url': 'https://raw.githubusercontent.com/kwonyujin119/test3/main/server/album_server.py',
         'update_check_min': 10,
+        'tunnel': 'auto',                               # auto: 이 폴더(또는 상위)에 cloudflared.exe가 있으면 임시 공개 주소를 만든다 / off: 안 만든다
     }
     conf = {}
     try:
@@ -80,6 +81,18 @@ def write_conf(conf):
 CONF = load_conf()
 PHOTOS = str(CONF.get('photos_dir') or os.path.join(BASE, '사진'))
 os.makedirs(PHOTOS, exist_ok=True)
+
+
+def web_dir():
+    """화면 파일(index.html 등)이 있는 폴더: web\\ → 상위 폴더(저장소 통째로 받았을 때) 순."""
+    for d in (os.path.join(BASE, 'web'), os.path.dirname(BASE)):
+        if os.path.exists(os.path.join(d, 'index.html')):
+            return d
+    return None
+
+
+WEB_TYPES = {'.html': 'text/html; charset=utf-8', '.webmanifest': 'application/manifest+json', '.js': 'text/javascript; charset=utf-8',
+             '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'}
 
 
 def conf_disk(key):
@@ -286,6 +299,17 @@ class H(BaseHTTPRequestHandler):
                 self.wfile.write(chunk)
                 left -= len(chunk)
 
+    def web_get(self, rel):
+        """앨범 화면(index.html·manifest·sw.js·icons·img)을 이 서버가 직접 내보낸다 — 같은 주소라 CORS·도메인이 필요 없다."""
+        d = web_dir()
+        if not d:
+            return self.send(200, '유진·아름 사진 저장소 서버 ' + VERSION + ' — 화면 파일(index.html)이 없습니다. 저장소를 통째로 받아 server 폴더가 그 안에 있게 두거나, web 폴더에 화면 파일을 넣어 주세요.', 'text/plain; charset=utf-8')
+        fp = os.path.realpath(os.path.join(d, rel))
+        if not fp.startswith(os.path.realpath(d) + os.sep) or not os.path.isfile(fp):
+            return self.err(404, '없는 주소입니다')
+        ext = os.path.splitext(fp)[1].lower()
+        return self.send_file(fp, WEB_TYPES.get(ext, 'application/octet-stream'), 'inline', 'no-cache' if ext in ('.html', '.webmanifest', '.js') else 'public, max-age=86400')
+
     # --- 인증
     def token(self):
         a = re.fullmatch(r'Bearer ([A-Za-z0-9_\-]{20,})', (self.headers.get('Authorization') or '').strip())
@@ -315,11 +339,11 @@ class H(BaseHTTPRequestHandler):
         if not self.cors_origin():
             return self.send(403, b'', 'text/plain')
         return self.send(204, b'', 'text/plain', {'Access-Control-Allow-Methods': 'GET, POST, DELETE, HEAD',
-                                                  'Access-Control-Allow-Headers': 'X-SACHIL, Content-Type, Authorization, Range',
+                                                  'Access-Control-Allow-Headers': 'X-ALBUM, Content-Type, Authorization, Range',
                                                   'Access-Control-Max-Age': '600'})
 
     def guard(self):
-        return self.headers.get('X-SACHIL') == '1'
+        return self.headers.get('X-ALBUM') == '1'
 
     def do_HEAD(self):
         self.do_GET()
@@ -329,14 +353,11 @@ class H(BaseHTTPRequestHandler):
         path, _, qs = self.path.partition('?')
         args = urllib.parse.parse_qs(qs)
         try:
-            if path in ('/', '/index.html'):
-                page = str(CONF.get('page_url') or '')
-                if page.startswith('https://'):
-                    return self.send(302, b'', 'text/plain', {'Location': page})
-                return self.send(200, '유진·아름 사진 저장소 서버 ' + VERSION, 'text/plain; charset=utf-8')
+            if path in ('/', '/index.html') or re.fullmatch(r'/(manifest\.webmanifest|sw\.js|icons/[A-Za-z0-9_\-]+\.png|img/[A-Za-z0-9_\-]+\.jpg)', path):
+                return self.web_get('index.html' if path == '/' else path.lstrip('/'))
             if path == '/healthz':
                 return self.send(200, {'ok': True})
-            if path == '/api/me':   # 화면의 진단용(SACHIL 서버와 같은 모양)
+            if path == '/api/me':   # 화면의 진단용
                 return self.send(200, {'server': 'album', 'version': VERSION, 'album': True})
             if path == '/api/album/ping':
                 return self.send(200, {'ok': True, 'server': 'album', 'version': VERSION, 'who': list(WHO), 'has_code': bool(conf_disk('code_hash'))})
@@ -620,6 +641,45 @@ def auto_update_loop(srv):
             upd_log(f'확인 실패(다음에 다시): {str(e)[:120]}')
 
 
+TUNNEL_URL = ['']
+
+
+def find_cloudflared():
+    for d in (BASE, os.path.dirname(BASE)):
+        for n in ('cloudflared.exe', 'cloudflared'):
+            p = os.path.join(d, n)
+            if os.path.isfile(p):
+                return p
+    return shutil.which('cloudflared')
+
+
+def tunnel_loop(port):
+    """선택 기능: cloudflared가 있으면 임시 공개 주소(https://…trycloudflare.com)를 만든다. 서버를 다시 켜면 주소가 바뀐다."""
+    import subprocess
+    exe = find_cloudflared()
+    if not exe:
+        return
+    while True:
+        try:
+            p = subprocess.Popen([exe, 'tunnel', '--no-autoupdate', '--url', f'http://127.0.0.1:{port}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
+            for line in p.stdout:
+                m = re.search(r'https://(?!api\.)[a-z0-9\-]+\.trycloudflare\.com', line)
+                if m and 'failed' not in line.lower() and not TUNNEL_URL[0]:
+                    TUNNEL_URL[0] = m.group(0)
+                    try:
+                        with open(os.path.join(DATA, 'url.txt'), 'w', encoding='utf-8') as f:
+                            f.write(TUNNEL_URL[0] + '\n')
+                    except OSError:
+                        pass
+                    print('=' * 70 + f'\n  바깥(이동통신)에서 여는 주소: {TUNNEL_URL[0]}   (서버를 다시 켜면 바뀜 · data\\url.txt에도 저장)\n' + '=' * 70, flush=True)
+            p.wait()
+        except OSError as e:
+            print('[터널] cloudflared를 실행할 수 없습니다:', e, flush=True)
+            return
+        TUNNEL_URL[0] = ''
+        time.sleep(15)
+
+
 def lan_ip():
     import socket
     try:
@@ -662,14 +722,15 @@ def main():
     line = '=' * 70
     print(line)
     print(f'  유진·아름 사진 저장소 서버 {VERSION}   종료: 이 창에서 Ctrl+C')
-    print(f'  이 컴퓨터:  http://localhost:{port}      같은 망: http://{lan_ip()}:{port}')
-    print(f'  공개 주소:  {CONF.get("public_url") or "(아직 없음 — Cloudflare 터널의 Public Hostname을 http://localhost:%d 로 연결)" % port}')
-    print(f'  사진 폴더:  {PHOTOS}')
-    print(f'  화면:       {CONF.get("page_url")}  → ⋯ 메뉴 → 서버 주소에 공개 주소 입력')
-    print(f'  접속코드:   설정됨 (바꾸기: set-code.bat)')
-    print(f'  자동 업데이트: {"켜짐(10분마다 확인)" if CONF.get("auto_update") else "꺼짐"}')
+    print(f'  이 PC에서:        http://localhost:{port}')
+    print(f'  같은 와이파이 폰: http://{lan_ip()}:{port}   ← 폰 브라우저에 이 주소를 입력 (홈 화면에 추가해 두면 편함)')
+    print(f'  사진 폴더:        {PHOTOS}' + ('' if web_dir() else '   [주의] 화면 파일(index.html)을 찾지 못함'))
+    print(f'  접속코드:         설정됨 (바꾸기: set-code.bat)')
+    print(f'  자동 업데이트:    {"켜짐(10분마다 확인)" if CONF.get("auto_update") else "꺼짐"}' + ('' if find_cloudflared() or str(CONF.get('tunnel')) == 'off' else '   · 바깥에서도 쓰려면 이 폴더에 cloudflared.exe 를 두세요(선택)'))
     print(line, flush=True)
     threading.Thread(target=auto_update_loop, args=(srv,), daemon=True).start()
+    if str(CONF.get('tunnel') or 'auto') != 'off':
+        threading.Thread(target=tunnel_loop, args=(port,), daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
