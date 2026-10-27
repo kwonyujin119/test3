@@ -195,17 +195,17 @@ main{padding:6px 6px calc(96px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v5';
+const VER = 'v6';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
              set: (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} },
              del: k => { try { localStorage.removeItem(k); } catch (_) {} } };
-const SRV_CANDIDATES = ['https://album.sachil47.com', 'https://app.sachil47.com'];   // 별도 앨범 서버 → 없으면 SACHIL 서버(15.8+)
+const SRV_CANDIDATES = ['https://album.sachil47.com', 'https://app.sachil47.com', 'http://localhost:4848'];   // 별도 앨범 서버 → SACHIL 서버(15.8+) → 서버 PC 자신에서 열었을 때
 const DEF_SRV = SRV_CANDIDATES[0];
 const qsSrv = new URLSearchParams(location.search).get('srv');
 // 서버 주소는 PC 서버(app.sachil47.com)여야 한다. 이 페이지 자신의 주소(github.io)나 http(s)가 아닌 값은 버리고 기본값으로
-function badSrv(u) { try { const x = new URL(u); return x.origin === location.origin || !/^https?:$/.test(x.protocol) || /github\.io$/i.test(x.hostname); } catch (_) { return true; } }
+function badSrv(u) { try { const x = new URL(u); return x.origin === location.origin || !/^https?:$/.test(x.protocol) || /github\.io$/i.test(x.hostname) || (x.protocol === 'http:' && !/^(localhost|127\.0\.0\.1|192\.168\.|10\.)/.test(x.hostname)); } catch (_) { return true; } }
 let SRV = (qsSrv || LS.get('album.srv') || DEF_SRV).replace(/\/+$/, '');
 if (badSrv(SRV)) { SRV = DEF_SRV; LS.del('album.srv'); }
 else if (qsSrv) LS.set('album.srv', SRV);
