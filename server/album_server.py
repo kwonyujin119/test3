@@ -6,16 +6,19 @@ r"""
     data\config.json   설정(포트·접속코드 해시·허용 주소·사진 폴더)
     data\album.db      사진 목록(SQLite)
     사진\               사진 원본(<id>) + 미리보기(<id>.t.jpg)  ← config.json의 photos_dir로 바꿀 수 있음
+    사진\<폴더이름>\      화면에서 만든 폴더(앨범)의 사진은 그 이름의 하위 폴더에 들어간다
 
   실행: start.bat (자동 업데이트 포함)  /  접속코드 바꾸기: set-code.bat 또는 --set-code 새코드
   화면: 이 서버가 직접 보여 준다 — 같은 와이파이의 폰·PC에서 http://<이 PC 주소>:4848 을 연다(도메인 불필요)
         (화면 파일 index.html 등은 이 폴더의 상위 폴더 또는 web\ 폴더에서 찾는다)
-  바깥(이동통신)에서도 쓰려면: 이 폴더에 cloudflared.exe 를 두면 켤 때마다 임시 공개 주소(trycloudflare.com)를 만들어 보여 준다(선택)
+  바깥(이동통신)에서도 쓰려면: start.bat이 cloudflared.exe를 받아 켤 때마다 공개 주소(trycloudflare.com)를 만들고,
+        GitHub 토큰(github-token-setup.bat)이 있으면 그 주소를 저장소의 server-url.json에 적어 둔다
+        → 화면(https://kwonyujin119.github.io/test3/)이 그 파일을 읽어 어디서든 이 서버로 붙는다(도메인 불필요)
 """
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '1.1'
+VERSION = '1.3'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -50,7 +53,9 @@ def load_conf():
         'auto_update': True,                            # GitHub의 server/album_server.py가 새 버전이면 스스로 교체하고 다시 켬
         'update_url': 'https://raw.githubusercontent.com/kwonyujin119/test3/main/server/album_server.py',
         'update_check_min': 10,
-        'tunnel': 'auto',                               # auto: 이 폴더(또는 상위)에 cloudflared.exe가 있으면 임시 공개 주소를 만든다 / off: 안 만든다
+        'tunnel': 'auto',                               # auto: 이 폴더(또는 상위)에 cloudflared.exe가 있으면 공개 주소를 만든다 / off: 안 만든다
+        'github_token': '',                             # github-token-setup.bat으로 넣음. 공개 주소를 저장소의 server-url.json에 적는 데만 씀
+        'github_repo': 'kwonyujin119/test3',            # 화면이 있는 저장소
     }
     conf = {}
     try:
@@ -118,8 +123,43 @@ PRAGMA synchronous=NORMAL;
 CREATE TABLE IF NOT EXISTS photos(id TEXT PRIMARY KEY, who TEXT, name TEXT, mime TEXT, size INTEGER, w INTEGER, h INTEGER, memo TEXT, taken REAL, ts REAL, thumb INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS ix_photos_taken ON photos(taken);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, who TEXT, created REAL, seen REAL, ip TEXT);
+CREATE TABLE IF NOT EXISTS folders(id TEXT PRIMARY KEY, name TEXT UNIQUE, ts REAL);
 ''')
+try:   # 1.3: 사진이 속한 폴더(앨범). 빈 값이면 기본(폴더 없음)
+    DB.execute('ALTER TABLE photos ADD COLUMN folder TEXT DEFAULT \'\'')
+except sqlite3.OperationalError:
+    pass
 DB.commit()
+
+
+def folder_name_ok(name):
+    name = re.sub(r'[\x00-\x1f\x7f<>:"/\\|?*]', '', str(name or '')).strip().strip('.')
+    name = re.sub(r'\s+', ' ', name)[:40]
+    return name if name and name.lower() not in ('con', 'prn', 'aux', 'nul') else ''
+
+
+def folder_row(r, counts):
+    return {'id': r['id'], 'name': r['name'], 'ts': r['ts'], 'count': counts.get(r['id'], 0)}
+
+
+def folders_out():
+    counts = {x['folder']: x['n'] for x in q('SELECT folder, COUNT(*) n FROM photos GROUP BY folder')}
+    return {'folders': [folder_row(r, counts) for r in q('SELECT * FROM folders ORDER BY name')], 'root_count': counts.get('', 0)}
+
+
+def photo_dir(folder_id):
+    """폴더(앨범)의 실제 디스크 폴더. 없으면 만든다."""
+    if folder_id:
+        f = q('SELECT name FROM folders WHERE id=?', (folder_id,), one=True)
+        if f:
+            d = os.path.join(PHOTOS, f['name'])
+            os.makedirs(d, exist_ok=True)
+            return d
+    return PHOTOS
+
+
+def photo_path(r):
+    return os.path.join(photo_dir(r['folder'] if 'folder' in r.keys() else ''), r['id'])
 
 
 def q(sql, args=(), one=False, commit=False):
@@ -166,7 +206,7 @@ def usage():
 
 def row_out(r):
     return {'id': r['id'], 'who': r['who'] or '', 'name': r['name'], 'mime': r['mime'], 'size': r['size'], 'w': r['w'], 'h': r['h'],
-            'memo': r['memo'] or '', 'taken': r['taken'], 'ts': r['ts'], 'thumb': bool(r['thumb'])}
+            'memo': r['memo'] or '', 'taken': r['taken'], 'ts': r['ts'], 'thumb': bool(r['thumb']), 'folder': r['folder'] or ''}
 
 
 # ---------------------------------------------------------------- HTTP
@@ -368,13 +408,15 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, dict(ok=True, who=u['who'], admin=True, has_code=bool(CONF.get('code_hash')), version=VERSION, **usage()))
             if path == '/api/album/photos':
                 rows = q('SELECT * FROM photos ORDER BY taken DESC, ts DESC LIMIT 20000')
-                return self.send(200, dict(ok=True, photos=[row_out(r) for r in rows], **usage()))
+                return self.send(200, dict(ok=True, photos=[row_out(r) for r in rows], **usage(), **folders_out()))
+            if path == '/api/album/folders':
+                return self.send(200, dict(ok=True, **folders_out()))
             m = re.fullmatch(r'/api/album/(file|thumb)/([a-f0-9]{24})', path)
             if m:
                 r = q('SELECT * FROM photos WHERE id=?', (m.group(2),), one=True)
                 if not r:
                     return self.err(404, '사진이 없습니다')
-                fp = os.path.join(PHOTOS, r['id'])
+                fp = photo_path(r)
                 if m.group(1) == 'thumb' and r['thumb'] and os.path.exists(fp + '.t.jpg'):
                     return self.send_file(fp + '.t.jpg', 'image/jpeg', 'inline', 'private, max-age=31536000, immutable')
                 if not os.path.exists(fp):
@@ -411,12 +453,53 @@ class H(BaseHTTPRequestHandler):
             m = re.fullmatch(r'/api/album/thumb/([a-f0-9]{24})', path)
             if m:
                 return self.thumb_put(m.group(1))
+            if path == '/api/album/folders':   # 1.3: 폴더(앨범) 만들기 — 디스크에도 같은 이름의 폴더
+                b = self.body_json()
+                name = folder_name_ok(b.get('name'))
+                if not name:
+                    return self.err(400, '폴더 이름을 적어 주세요(특수문자 \\ / : * ? " < > | 제외, 40자까지)')
+                if q('SELECT id FROM folders WHERE name=?', (name,), one=True):
+                    return self.err(409, '같은 이름의 폴더가 있어요')
+                fid = secrets.token_hex(8)
+                os.makedirs(os.path.join(PHOTOS, name), exist_ok=True)
+                q('INSERT INTO folders(id,name,ts) VALUES(?,?,?)', (fid, name, time.time()), commit=True)
+                print(f'[앨범] 폴더 만듦: {name}', flush=True)
+                return self.send(200, dict(ok=True, folder={'id': fid, 'name': name, 'ts': time.time(), 'count': 0}, **folders_out()))
+            m = re.fullmatch(r'/api/album/folders/([a-f0-9]{16})', path)
+            if m:   # 폴더 이름 바꾸기(디스크 폴더도 함께)
+                b = self.body_json()
+                f = q('SELECT * FROM folders WHERE id=?', (m.group(1),), one=True)
+                if not f:
+                    return self.err(404, '폴더가 없어요')
+                name = folder_name_ok(b.get('name'))
+                if not name:
+                    return self.err(400, '폴더 이름을 적어 주세요')
+                if name != f['name']:
+                    if q('SELECT id FROM folders WHERE name=?', (name,), one=True):
+                        return self.err(409, '같은 이름의 폴더가 있어요')
+                    old, new = os.path.join(PHOTOS, f['name']), os.path.join(PHOTOS, name)
+                    if os.path.isdir(old):
+                        os.replace(old, new)
+                    else:
+                        os.makedirs(new, exist_ok=True)
+                    q('UPDATE folders SET name=? WHERE id=?', (name, f['id']), commit=True)
+                return self.send(200, dict(ok=True, **folders_out()))
             m = re.fullmatch(r'/api/album/photos/([a-f0-9]{24})', path)
             if m:
                 b = self.body_json()
-                r = q('SELECT id FROM photos WHERE id=?', (m.group(1),), one=True)
+                r = q('SELECT * FROM photos WHERE id=?', (m.group(1),), one=True)
                 if not r:
                     return self.err(404, '사진이 없습니다')
+                if 'folder' in b:   # 1.3: 다른 폴더로 옮기기(파일도 옮김)
+                    dest = str(b.get('folder') or '')
+                    if dest and not q('SELECT id FROM folders WHERE id=?', (dest,), one=True):
+                        return self.err(404, '옮길 폴더가 없어요')
+                    if dest != (r['folder'] or ''):
+                        src, dst = photo_path(r), os.path.join(photo_dir(dest), r['id'])
+                        for suf in ('', '.t.jpg'):
+                            if os.path.exists(src + suf):
+                                os.replace(src + suf, dst + suf)
+                        q('UPDATE photos SET folder=? WHERE id=?', (dest, r['id']), commit=True)
                 if 'memo' in b:
                     memo = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', str(b.get('memo') or '')).strip()[:300]
                     q('UPDATE photos SET memo=? WHERE id=?', (memo, r['id']), commit=True)
@@ -456,13 +539,29 @@ class H(BaseHTTPRequestHandler):
             u = self.auth()
             if not u:
                 return self.err(401, '앨범 로그인이 필요합니다')
+            mf = re.fullmatch(r'/api/album/folders/([a-f0-9]{16})', path)
+            if mf:   # 1.3: 빈 폴더만 지울 수 있다(사진이 있으면 먼저 옮기거나 지우기)
+                f = q('SELECT * FROM folders WHERE id=?', (mf.group(1),), one=True)
+                if not f:
+                    return self.err(404, '폴더가 없어요')
+                n = q('SELECT COUNT(*) n FROM photos WHERE folder=?', (f['id'],), one=True)['n']
+                if n:
+                    return self.err(400, f'사진이 {n}장 들어 있어요. 먼저 옮기거나 지운 뒤 폴더를 지울 수 있어요')
+                q('DELETE FROM folders WHERE id=?', (f['id'],), commit=True)
+                d = os.path.join(PHOTOS, f['name'])
+                try:
+                    if os.path.isdir(d) and not os.listdir(d):
+                        os.rmdir(d)
+                except OSError:
+                    pass
+                return self.send(200, dict(ok=True, **folders_out()))
             m = re.fullmatch(r'/api/album/photos/([a-f0-9]{24})', path)
             if not m:
                 return self.err(404, '없는 주소입니다')
             r = q('SELECT * FROM photos WHERE id=?', (m.group(1),), one=True)
             if not r:
                 return self.err(404, '사진이 없습니다')
-            fp = os.path.join(PHOTOS, r['id'])
+            fp = photo_path(r)
             for p in (fp, fp + '.t.jpg'):
                 try:
                     if os.path.exists(p):
@@ -523,8 +622,11 @@ class H(BaseHTTPRequestHandler):
         taken = to_int((args.get('taken') or [''])[0], None, 0, 4102444800000)
         w = to_int((args.get('w') or [''])[0], 0, 0, 100000)
         h = to_int((args.get('h') or [''])[0], 0, 0, 100000)
+        folder = (args.get('folder') or [''])[0]
+        if folder and not q('SELECT id FROM folders WHERE id=?', (folder,), one=True):
+            folder = ''
         fid = secrets.token_hex(12)
-        fp = os.path.join(PHOTOS, fid)
+        fp = os.path.join(photo_dir(folder), fid)
         tmp = fp + '.up'
         head, left = b'', n
         try:
@@ -546,13 +648,14 @@ class H(BaseHTTPRequestHandler):
             if os.path.exists(tmp):
                 os.remove(tmp)
         now = time.time()
-        q('INSERT INTO photos(id,who,name,mime,size,w,h,memo,taken,ts,thumb) VALUES(?,?,?,?,?,?,?,?,?,?,0)',
-          (fid, u['who'], name or ('사진' + kind[1]), kind[0], n, w, h, memo, (taken / 1000.0) if taken else now, now), commit=True)
+        q('INSERT INTO photos(id,who,name,mime,size,w,h,memo,taken,ts,thumb,folder) VALUES(?,?,?,?,?,?,?,?,?,?,0,?)',
+          (fid, u['who'], name or ('사진' + kind[1]), kind[0], n, w, h, memo, (taken / 1000.0) if taken else now, now, folder), commit=True)
         print(f'[앨범] 올림: {name or fid} ({n // 1024}KB)', flush=True)
         return self.send(200, dict(ok=True, photo=row_out(q('SELECT * FROM photos WHERE id=?', (fid,), one=True)), **usage()))
 
     def thumb_put(self, fid):
-        if not q('SELECT id FROM photos WHERE id=?', (fid,), one=True):
+        r = q('SELECT * FROM photos WHERE id=?', (fid,), one=True)
+        if not r:
             return self.err(404, '사진이 없습니다')
         n = self.clen()
         if n <= 0 or n > THUMB_MAX:
@@ -562,7 +665,7 @@ class H(BaseHTTPRequestHandler):
         self._body_read = True
         if len(data) != n or not data.startswith(b'\xff\xd8\xff'):
             return self.err(415, 'JPEG만 받습니다')
-        with open(os.path.join(PHOTOS, fid + '.t.jpg'), 'wb') as f:
+        with open(photo_path(r) + '.t.jpg', 'wb') as f:
             f.write(data)
         q('UPDATE photos SET thumb=1 WHERE id=?', (fid,), commit=True)
         return self.send(200, {'ok': True})
@@ -653,6 +756,43 @@ def find_cloudflared():
     return shutil.which('cloudflared')
 
 
+def publish_url(url):
+    """공개 주소를 GitHub 저장소의 server-url.json에 적는다(화면이 읽어 서버를 찾음). 토큰이 없으면 건너뛴다."""
+    import base64, urllib.request
+    tok, repo = str(CONF.get('github_token') or ''), str(CONF.get('github_repo') or '')
+    if not tok or not re.fullmatch(r'[A-Za-z0-9_\-]+/[A-Za-z0-9_.\-]+', repo):
+        print('[주소] GitHub 토큰이 없어 server-url.json을 갱신하지 않습니다(github-token-setup.bat). 폰에서는 위 주소를 직접 열어 주세요.', flush=True)
+        return
+    api = f'https://api.github.com/repos/{repo}/contents/server-url.json'
+    hdr = {'Authorization': 'Bearer ' + tok, 'Accept': 'application/vnd.github+json', 'User-Agent': 'album-server', 'X-GitHub-Api-Version': '2022-11-28'}
+    sha = None
+    try:
+        with urllib.request.urlopen(urllib.request.Request(api, headers=hdr), timeout=20) as r:
+            cur = json.loads(r.read().decode('utf-8'))
+            sha = cur.get('sha')
+            try:
+                old = json.loads(base64.b64decode(cur.get('content') or '').decode('utf-8'))
+                if old.get('url') == url:
+                    print('[주소] server-url.json이 이미 같은 주소입니다.', flush=True)
+                    return
+            except Exception:
+                pass
+    except Exception as e:
+        if '404' not in str(e):
+            print('[주소] server-url.json 확인 실패:', str(e)[:120], flush=True)
+    body = {'message': '서버 주소 갱신 (' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M') + ')',
+            'content': base64.b64encode(json.dumps({'url': url, 'ts': int(time.time())}).encode('utf-8')).decode('ascii')}
+    if sha:
+        body['sha'] = sha
+    try:
+        req = urllib.request.Request(api, data=json.dumps(body).encode('utf-8'), headers=dict(hdr, **{'Content-Type': 'application/json'}), method='PUT')
+        with urllib.request.urlopen(req, timeout=30) as r:
+            r.read()
+        print('[주소] server-url.json 갱신 완료 — 1~2분 뒤 https://kwonyujin119.github.io/test3/ 가 이 서버로 붙습니다.', flush=True)
+    except Exception as e:
+        print('[주소] server-url.json 갱신 실패:', str(e)[:160], '— 토큰이 test3 저장소 Contents 읽기·쓰기 권한인지 확인', flush=True)
+
+
 def tunnel_loop(port):
     """선택 기능: cloudflared가 있으면 임시 공개 주소(https://…trycloudflare.com)를 만든다. 서버를 다시 켜면 주소가 바뀐다."""
     import subprocess
@@ -672,6 +812,7 @@ def tunnel_loop(port):
                     except OSError:
                         pass
                     print('=' * 70 + f'\n  바깥(이동통신)에서 여는 주소: {TUNNEL_URL[0]}   (서버를 다시 켜면 바뀜 · data\\url.txt에도 저장)\n' + '=' * 70, flush=True)
+                    threading.Thread(target=publish_url, args=(TUNNEL_URL[0],), daemon=True).start()
             p.wait()
         except OSError as e:
             print('[터널] cloudflared를 실행할 수 없습니다:', e, flush=True)
@@ -702,6 +843,16 @@ def main():
         write_conf(CONF)
         print('접속코드 저장 완료 (config.json에는 해시로만 저장). 이미 켜진 서버도 다음 로그인부터 새 코드를 씁니다.')
         return
+    if '--set-github-token' in sys.argv:
+        raw = ' '.join(sys.argv[sys.argv.index('--set-github-token') + 1:])
+        m = re.search(r'(github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,})', raw)
+        if not m:
+            print('GitHub 토큰을 찾지 못했습니다. github_pat_ 또는 ghp_ 로 시작하는 토큰을 붙여 넣으세요.')
+            sys.exit(1)
+        CONF['github_token'] = m.group(1)
+        write_conf(CONF)
+        print('GitHub 토큰 저장 완료 (' + m.group(1)[:14] + '…). 서버를 켜면 공개 주소를 저장소에 자동으로 적습니다.')
+        return
     if '--set-photos-dir' in sys.argv:
         d = ' '.join(sys.argv[sys.argv.index('--set-photos-dir') + 1:]).strip().strip('"')
         if not d:
@@ -726,7 +877,8 @@ def main():
     print(f'  같은 와이파이 폰: http://{lan_ip()}:{port}   ← 폰 브라우저에 이 주소를 입력 (홈 화면에 추가해 두면 편함)')
     print(f'  사진 폴더:        {PHOTOS}' + ('' if web_dir() else '   [주의] 화면 파일(index.html)을 찾지 못함'))
     print(f'  접속코드:         설정됨 (바꾸기: set-code.bat)')
-    print(f'  자동 업데이트:    {"켜짐(10분마다 확인)" if CONF.get("auto_update") else "꺼짐"}' + ('' if find_cloudflared() or str(CONF.get('tunnel')) == 'off' else '   · 바깥에서도 쓰려면 이 폴더에 cloudflared.exe 를 두세요(선택)'))
+    print(f'  자동 업데이트:    {"켜짐(10분마다 확인)" if CONF.get("auto_update") else "꺼짐"}')
+    print(f'  바깥 접속:        ' + ('cloudflared 없음 — start.bat이 받지 못했으면 server 폴더에 cloudflared.exe를 넣어 주세요' if not find_cloudflared() else ('공개 주소 만드는 중… (아래에 뜸)' + ('' if CONF.get('github_token') else ' · GitHub 토큰 없음 → github-token-setup.bat 실행하면 화면이 주소를 자동으로 찾음'))))
     print(line, flush=True)
     threading.Thread(target=auto_update_loop, args=(srv,), daemon=True).start()
     if str(CONF.get('tunnel') or 'auto') != 'off':

@@ -13,6 +13,15 @@ if not defined PY (
   pause
   exit /b 1
 )
+rem cloudflared.exe makes the public address (https://....trycloudflare.com). Download it once if missing.
+if not exist cloudflared.exe (
+  echo [setup] Downloading cloudflared.exe for the public address ...
+  curl -L --fail -o cloudflared.exe https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
+  if errorlevel 1 (
+    echo [setup] Download failed. The server still works on this PC and on the same Wi-Fi.
+    if exist cloudflared.exe del cloudflared.exe
+  )
+)
 set /a FAILS=0
 :run
 %PY% album_server.py
