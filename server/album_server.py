@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '1.3'
+VERSION = '1.4'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -405,7 +405,9 @@ class H(BaseHTTPRequestHandler):
             if not u:
                 return self.err(401, '앨범 로그인이 필요합니다')
             if path == '/api/album/me':
-                return self.send(200, dict(ok=True, who=u['who'], admin=True, has_code=bool(CONF.get('code_hash')), version=VERSION, **usage()))
+                return self.send(200, dict(ok=True, who=u['who'], admin=True, has_code=bool(CONF.get('code_hash')), version=VERSION,
+                                           public_url=TUNNEL_URL[0], has_token=bool(CONF.get('github_token')), published=PUBLISH_STATE['msg'],
+                                           tunnel=('off' if str(CONF.get('tunnel')) == 'off' else 'on' if TUNNEL_URL[0] else TUNNEL_STATE['msg']), **usage()))
             if path == '/api/album/photos':
                 rows = q('SELECT * FROM photos ORDER BY taken DESC, ts DESC LIMIT 20000')
                 return self.send(200, dict(ok=True, photos=[row_out(r) for r in rows], **usage(), **folders_out()))
@@ -508,6 +510,17 @@ class H(BaseHTTPRequestHandler):
                     if tk:
                         q('UPDATE photos SET taken=? WHERE id=?', (tk / 1000.0, r['id']), commit=True)
                 return self.send(200, {'ok': True, 'photo': row_out(q('SELECT * FROM photos WHERE id=?', (r['id'],), one=True))})
+            if path == '/api/album/github-token':   # 1.4: 폰에서 GitHub 토큰 등록 → 공개 주소를 저장소에 바로 적는다
+                b = self.body_json()
+                m = re.search(r'(github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,})', str(b.get('token') or ''))
+                if not m:
+                    return self.err(400, 'github_pat_ 또는 ghp_ 로 시작하는 토큰을 붙여 넣어 주세요')
+                CONF['github_token'] = m.group(1)
+                write_conf(CONF)
+                if TUNNEL_URL[0]:
+                    publish_url(TUNNEL_URL[0])
+                    return self.send(200, {'ok': True, 'published': PUBLISH_STATE['msg'], 'public_url': TUNNEL_URL[0]})
+                return self.send(200, {'ok': True, 'published': '토큰 저장됨 — 공개 주소가 생기면 자동으로 적습니다', 'public_url': ''})
             if path == '/api/album/code':   # 접속코드 바꾸기(로그인한 사람 누구나 — 둘만 쓰는 서버). 빈 값은 받지 않음
                 b = self.body_json()
                 new = re.sub(r'[\s\-]', '', str(b.get('code') or ''))
@@ -756,12 +769,17 @@ def find_cloudflared():
     return shutil.which('cloudflared')
 
 
+PUBLISH_STATE = {'msg': ''}
+TUNNEL_STATE = {'msg': '준비 중'}
+
+
 def publish_url(url):
     """공개 주소를 GitHub 저장소의 server-url.json에 적는다(화면이 읽어 서버를 찾음). 토큰이 없으면 건너뛴다."""
     import base64, urllib.request
     tok, repo = str(CONF.get('github_token') or ''), str(CONF.get('github_repo') or '')
     if not tok or not re.fullmatch(r'[A-Za-z0-9_\-]+/[A-Za-z0-9_.\-]+', repo):
-        print('[주소] GitHub 토큰이 없어 server-url.json을 갱신하지 않습니다(github-token-setup.bat). 폰에서는 위 주소를 직접 열어 주세요.', flush=True)
+        PUBLISH_STATE['msg'] = 'GitHub 토큰 없음'
+        print('[주소] GitHub 토큰이 없어 server-url.json을 갱신하지 않습니다(화면 ⋯ 메뉴 → 어디서든 접속, 또는 github-token-setup.bat).', flush=True)
         return
     api = f'https://api.github.com/repos/{repo}/contents/server-url.json'
     hdr = {'Authorization': 'Bearer ' + tok, 'Accept': 'application/vnd.github+json', 'User-Agent': 'album-server', 'X-GitHub-Api-Version': '2022-11-28'}
@@ -773,6 +791,7 @@ def publish_url(url):
             try:
                 old = json.loads(base64.b64decode(cur.get('content') or '').decode('utf-8'))
                 if old.get('url') == url:
+                    PUBLISH_STATE['msg'] = '등록됨'
                     print('[주소] server-url.json이 이미 같은 주소입니다.', flush=True)
                     return
             except Exception:
@@ -788,17 +807,91 @@ def publish_url(url):
         req = urllib.request.Request(api, data=json.dumps(body).encode('utf-8'), headers=dict(hdr, **{'Content-Type': 'application/json'}), method='PUT')
         with urllib.request.urlopen(req, timeout=30) as r:
             r.read()
+        PUBLISH_STATE['msg'] = '등록됨'
         print('[주소] server-url.json 갱신 완료 — 1~2분 뒤 https://kwonyujin119.github.io/test3/ 가 이 서버로 붙습니다.', flush=True)
     except Exception as e:
+        PUBLISH_STATE['msg'] = '갱신 실패: ' + str(e)[:80]
         print('[주소] server-url.json 갱신 실패:', str(e)[:160], '— 토큰이 test3 저장소 Contents 읽기·쓰기 권한인지 확인', flush=True)
 
 
-def tunnel_loop(port):
-    """선택 기능: cloudflared가 있으면 임시 공개 주소(https://…trycloudflare.com)를 만든다. 서버를 다시 켜면 주소가 바뀐다."""
-    import subprocess
+def ensure_cloudflared():
+    """1.4: Windows에서 cloudflared.exe가 없으면 서버가 직접 내려받는다(PC를 만지지 않아도 공개 주소가 생기게)."""
     exe = find_cloudflared()
-    if not exe:
+    if exe or os.name != 'nt':
+        return exe
+    import urllib.request
+    url = 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe'
+    dst = os.path.join(BASE, 'cloudflared.exe')
+    try:
+        TUNNEL_STATE['msg'] = 'cloudflared 내려받는 중'
+        print('[터널] cloudflared.exe를 내려받습니다(한 번만, 약 1분)…', flush=True)
+        with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'album-server'}), timeout=120) as r, open(dst + '.part', 'wb') as f:
+            shutil.copyfileobj(r, f)
+        if os.path.getsize(dst + '.part') < 10_000_000:
+            raise ValueError('받은 파일이 너무 작음')
+        os.replace(dst + '.part', dst)
+        print('[터널] cloudflared.exe 준비됨', flush=True)
+        return dst
+    except Exception as e:
+        TUNNEL_STATE['msg'] = 'cloudflared 내려받기 실패: ' + str(e)[:60]
+        print('[터널] cloudflared.exe 내려받기 실패:', str(e)[:120], flush=True)
+        try:
+            os.remove(dst + '.part')
+        except OSError:
+            pass
+        return None
+
+
+WEB_FILES = ['index.html', 'manifest.webmanifest', 'sw.js', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'img/login.jpg']
+
+
+def update_web():
+    """1.4: 화면 파일을 GitHub(main)에서 받아 web\\ 폴더에 둔다 — PC의 옛 화면 파일을 손대지 않아도 최신 화면이 나온다."""
+    import urllib.request
+    base = str(CONF.get('update_url') or '').rsplit('/server/', 1)[0]
+    if not base.startswith(('https://', 'http://127.0.0.1')):
         return
+    wd = os.path.join(BASE, 'web')
+    changed = 0
+    for rel in WEB_FILES:
+        try:
+            with urllib.request.urlopen(urllib.request.Request(f'{base}/{rel}?t={int(time.time())}', headers={'User-Agent': 'album-server'}), timeout=30) as r:
+                data = r.read(20_000_000)
+            if rel == 'index.html' and (len(data) < 10_000 or b'</html>' not in data):
+                raise ValueError('index.html 모양이 아님')
+            fp = os.path.join(wd, rel)
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+            if os.path.exists(fp) and open(fp, 'rb').read() == data:
+                continue
+            with open(fp + '.new', 'wb') as f:
+                f.write(data)
+            os.replace(fp + '.new', fp)
+            changed += 1
+        except Exception as e:
+            print('[화면]', rel, '받기 실패:', str(e)[:100], flush=True)
+            if rel == 'index.html':
+                return
+    if changed:
+        print(f'[화면] 화면 파일 {changed}개 갱신(web 폴더)', flush=True)
+
+
+def web_update_loop():
+    while True:
+        try:
+            update_web()
+        except Exception as e:
+            print('[화면] 갱신 실패:', str(e)[:100], flush=True)
+        time.sleep(max(5, float(CONF.get('update_check_min') or 10)) * 60)
+
+
+def tunnel_loop(port):
+    """cloudflared로 공개 주소(https://…trycloudflare.com)를 만든다. 서버를 다시 켜면 주소가 바뀐다 → publish_url이 저장소에 적는다."""
+    import subprocess
+    exe = ensure_cloudflared()
+    if not exe:
+        TUNNEL_STATE['msg'] = TUNNEL_STATE['msg'] if 'cloudflared' in TUNNEL_STATE['msg'] else 'cloudflared 없음'
+        return
+    TUNNEL_STATE['msg'] = '공개 주소 만드는 중'
     while True:
         try:
             p = subprocess.Popen([exe, 'tunnel', '--no-autoupdate', '--url', f'http://127.0.0.1:{port}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
@@ -815,9 +908,11 @@ def tunnel_loop(port):
                     threading.Thread(target=publish_url, args=(TUNNEL_URL[0],), daemon=True).start()
             p.wait()
         except OSError as e:
+            TUNNEL_STATE['msg'] = 'cloudflared 실행 실패'
             print('[터널] cloudflared를 실행할 수 없습니다:', e, flush=True)
             return
         TUNNEL_URL[0] = ''
+        TUNNEL_STATE['msg'] = '공개 주소 다시 만드는 중'
         time.sleep(15)
 
 
@@ -881,6 +976,8 @@ def main():
     print(f'  바깥 접속:        ' + ('cloudflared 없음 — start.bat이 받지 못했으면 server 폴더에 cloudflared.exe를 넣어 주세요' if not find_cloudflared() else ('공개 주소 만드는 중… (아래에 뜸)' + ('' if CONF.get('github_token') else ' · GitHub 토큰 없음 → github-token-setup.bat 실행하면 화면이 주소를 자동으로 찾음'))))
     print(line, flush=True)
     threading.Thread(target=auto_update_loop, args=(srv,), daemon=True).start()
+    if CONF.get('auto_update'):
+        threading.Thread(target=web_update_loop, daemon=True).start()
     if str(CONF.get('tunnel') or 'auto') != 'off':
         threading.Thread(target=tunnel_loop, args=(port,), daemon=True).start()
     try:

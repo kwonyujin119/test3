@@ -204,7 +204,7 @@ main{padding:6px 6px calc(96px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v9';
+const VER = 'v10';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -496,6 +496,7 @@ $('#menuBtn').addEventListener('click', async () => {
     { k: 'newf', icon: I_FOLDER, label: '새 폴더', sub: '사진을 모아 둘 폴더(앨범) 만들기' },
     ...(inFolder ? [{ k: 'renf', icon: I_FOLDER, label: `'${folderName(CUR)}' 이름 바꾸기` }, { k: 'delf', icon: I_FOLDER, label: `'${folderName(CUR)}' 폴더 지우기`, sub: '빈 폴더만', red: true }] : []),
     { k: 'usage', icon: I.disk, label: '저장 공간', sub: USAGE ? `${fmtMB(USAGE.bytes)} / ${fmtMB(USAGE.max_bytes)} 사용 · 사진 ${USAGE.count}장` : '' },
+    { k: 'pub', icon: I.srv, label: '어디서든 접속 (공개 주소)', sub: ME && ME.public_url ? (ME.has_token ? `github.io 자동 연결: ${ME.published || '확인 중'}` : '공개 주소 있음 · github.io 자동 연결하려면 토큰 등록') : `공개 주소: ${ME && ME.tunnel ? ME.tunnel : '없음'}` },
     ...(ME && ME.admin ? [{ k: 'code', icon: I.key, label: ME.has_code ? '접속코드 바꾸기' : '접속코드 정하기', sub: ME.has_code ? '둘이 쓰는 접속코드 · 바꾸면 다른 폰은 다시 로그인' : '아직 없어요 — 정하면 관리자 코드 없이 들어올 수 있어요' }] : []),
     ...(isStandalone() ? [] : [{ k: 'home', icon: I.home, label: '앱으로 설치', sub: 'PC·모바일 홈 화면에 아이콘으로' }]),
     { k: 'srv', icon: I.srv, label: '서버 주소', sub: SRV.replace(/^https?:\/\//, '') },
@@ -507,6 +508,7 @@ $('#menuBtn').addEventListener('click', async () => {
   if (it.k === 'renf') renameFolder(CUR);
   if (it.k === 'delf') deleteFolder(CUR);
   if (it.k === 'usage') toast(it.sub, 3000);
+  if (it.k === 'pub') publicDialog();
   if (it.k === 'srv') changeSrv();
   if (it.k === 'home') installApp();
   if (it.k === 'code') {
@@ -710,6 +712,26 @@ $('#vDel').addEventListener('click', async () => {
     toast('지웠어요', 1400);
   } catch (err) { toast(err.message); }
 });
+
+// ---------- 어디서든 접속: 서버가 만든 공개 주소 보기·복사, GitHub 토큰 등록(github.io가 서버를 자동으로 찾게)
+async function publicDialog() {
+  try { const j = await api('/api/album/me'); Object.assign(ME, j); } catch (_) {}
+  const url = ME.public_url || '';
+  const items = [];
+  if (url) items.push({ k: 'copy', icon: I.srv, label: '공개 주소 복사', sub: url.replace(/^https?:\/\//, '') + ' · 이 주소는 서버를 다시 켜면 바뀌어요' });
+  if (url && navigator.share) items.push({ k: 'share', icon: I.srv, label: '공개 주소 보내기(공유)' });
+  items.push({ k: 'token', icon: I.key, label: ME.has_token ? 'GitHub 토큰 다시 등록' : 'GitHub 토큰 등록', sub: ME.has_token ? `github.io 자동 연결: ${ME.published || '확인 중'}` : '등록하면 kwonyujin119.github.io/test3 가 서버를 스스로 찾아요' });
+  const it = await sheet(url ? '공개 주소가 있어요' : `공개 주소: ${ME.tunnel || '없음'}`, items);
+  if (!it) return;
+  if (it.k === 'copy') { try { await navigator.clipboard.writeText(url); toast('복사했어요', 1500); } catch (_) { dialog({ title: '공개 주소', value: url, okText: '닫기' }); } }
+  if (it.k === 'share') { try { await navigator.share({ title: '유진·아름 사진 저장소', url }); } catch (_) {} }
+  if (it.k === 'token') {
+    const v = await dialog({ title: 'GitHub 토큰 등록', text: 'github.com → Settings → Developer settings → Personal access tokens → Fine-grained → Generate: Repository access = Only test3, Permissions = Contents: Read and write. 만든 토큰(github_pat_…)을 붙여 넣어요. 토큰은 PC 서버에만 저장돼요.', password: true, placeholder: 'github_pat_…', okText: '등록' });
+    if (v === null || !v.trim()) return;
+    try { const j = await api('/api/album/github-token', { method: 'POST', json: { token: v.trim() } }); ME.has_token = true; ME.published = j.published; toast(j.published, 4000); }
+    catch (err) { toast(err.message, 4000); }
+  }
+}
 
 // ---------- 앱 설치(PWA): 크롬(PC·안드로이드)은 한 번 눌러 설치, 아이폰은 안내
 let installEv = null;
