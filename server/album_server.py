@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '1.4'
+VERSION = '1.5'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -510,6 +510,16 @@ class H(BaseHTTPRequestHandler):
                     if tk:
                         q('UPDATE photos SET taken=? WHERE id=?', (tk / 1000.0, r['id']), commit=True)
                 return self.send(200, {'ok': True, 'photo': row_out(q('SELECT * FROM photos WHERE id=?', (r['id'],), one=True))})
+            if path == '/api/album/update-now':   # 1.5: 폰에서 '지금 업데이트' — 새 버전이면 받아서 다시 켠다
+                try:
+                    msg = check_update()
+                except Exception as e:
+                    return self.send(200, {'ok': True, 'result': '확인 실패: ' + str(e)[:100], 'version': VERSION})
+                try:
+                    update_web()
+                except Exception:
+                    pass
+                return self.send(200, {'ok': True, 'result': msg, 'version': VERSION})
             if path == '/api/album/github-token':   # 1.4: 폰에서 GitHub 토큰 등록 → 공개 주소를 저장소에 바로 적는다
                 b = self.body_json()
                 m = re.search(r'(github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,})', str(b.get('token') or ''))
@@ -712,8 +722,63 @@ def upd_log(msg):
     print('[업데이트]', msg, flush=True)
 
 
-def auto_update_loop(srv):
+SRV_REF = [None]
+UPDATE_LOCK = threading.Lock()
+
+
+def check_update(apply=True):
+    """GitHub의 서버 파일이 새 버전이면 받아서 교체하고 다시 켠다. 돌려주는 값: 사람이 읽을 결과 문구.
+    start.bat으로 켰으면 종료 코드 75(bat이 다시 켬), 아니면 스스로 새 창을 띄우고 끝난다(1.5)."""
     me = os.path.abspath(__file__)
+    flag = os.path.join(DATA, 'update_verify.flag')
+    with UPDATE_LOCK:
+        url = str(CONF.get('update_url') or '')
+        if not url.startswith(('https://', 'http://127.0.0.1')):
+            return '업데이트 주소가 없음'
+        src = fetch_text(url + '?t=' + str(int(time.time())), 2_000_000)
+        m = re.search(r"^VERSION = '([0-9.]+)'", src, re.M)
+        if not m:
+            raise ValueError('받은 파일에 VERSION이 없음')
+        new = m.group(1)
+        if ver_tuple(new) <= ver_tuple(VERSION):
+            return f'지금이 최신({VERSION})'
+        if 'def main()' not in src or 'ThreadingHTTPServer' not in src:
+            raise ValueError('받은 파일이 서버 파일 같지 않음')
+        compile(src, 'album_server.py', 'exec')
+        if not apply:
+            return f'새 버전 {new} 있음'
+        shutil.copy2(me, me + '.bak')
+        with open(me + '.new', 'w', encoding='utf-8', newline='') as f:
+            f.write(src)
+        os.replace(me + '.new', me)
+        with open(flag, 'w', encoding='utf-8') as f:
+            f.write(new)
+        upd_log(f'새 버전 {new} 받음 — 다시 켭니다')
+        threading.Thread(target=restart_self, daemon=True).start()
+        return f'새 버전 {new} 받음 — 30초 뒤 새로고침하세요'
+
+
+def restart_self():
+    """답을 보낸 뒤 프로세스를 통째로 끝낸다(os._exit). srv.shutdown()을 먼저 부르면 주 스레드가 먼저 끝나 종료 코드가 0이 되는 문제(1.0~1.4)가 있었다."""
+    time.sleep(2)
+    if os.environ.get('ALBUM_LOOP') == '1':
+        os._exit(75)   # start.bat이 바로 다시 켠다
+    # start.bat 없이 켠 경우: 새 창에서 스스로 다시 켜고 이 창은 닫는다
+    import subprocess
+    me = os.path.abspath(__file__)
+    try:
+        if os.name == 'nt':
+            subprocess.Popen([sys.executable, me], cwd=BASE, creationflags=getattr(subprocess, 'CREATE_NEW_CONSOLE', 0))
+        else:
+            subprocess.Popen([sys.executable, me], cwd=BASE, start_new_session=True)
+    except Exception as e:
+        upd_log(f'다시 켜기 실패: {str(e)[:100]} — 수동으로 start.bat을 실행해 주세요')
+        os._exit(1)
+    os._exit(0)
+
+
+def auto_update_loop(srv):
+    SRV_REF[0] = srv
     flag = os.path.join(DATA, 'update_verify.flag')
     if os.path.exists(flag):   # 업데이트 직후: 1분 버티면 성공
         time.sleep(60)
@@ -722,8 +787,6 @@ def auto_update_loop(srv):
         except OSError:
             pass
         upd_log(f'서버 {VERSION}로 업데이트 완료')
-    if os.environ.get('ALBUM_LOOP') != '1':
-        return   # start.bat으로 켠 게 아니면 교체하지 않는다(꺼진 채로 남지 않게)
     while True:
         try:
             mins = max(5, float(CONF.get('update_check_min') or 10))
@@ -733,26 +796,7 @@ def auto_update_loop(srv):
         if not CONF.get('auto_update'):
             continue
         try:
-            url = str(CONF.get('update_url') or '')
-            if not url.startswith('https://'):
-                continue
-            src = fetch_text(url + '?t=' + str(int(time.time())), 2_000_000)
-            m = re.search(r"^VERSION = '([0-9.]+)'", src, re.M)
-            if not m or ver_tuple(m.group(1)) <= ver_tuple(VERSION):
-                continue
-            if 'def main()' not in src or 'ThreadingHTTPServer' not in src:
-                raise ValueError('받은 파일이 서버 파일 같지 않음')
-            compile(src, 'album_server.py', 'exec')
-            shutil.copy2(me, me + '.bak')
-            with open(me + '.new', 'w', encoding='utf-8', newline='') as f:
-                f.write(src)
-            os.replace(me + '.new', me)
-            with open(flag, 'w', encoding='utf-8') as f:
-                f.write(m.group(1))
-            upd_log(f'새 버전 {m.group(1)} 받음 — 다시 켭니다')
-            threading.Thread(target=srv.shutdown, daemon=True).start()
-            time.sleep(3)
-            os._exit(75)
+            check_update()
         except Exception as e:
             upd_log(f'확인 실패(다음에 다시): {str(e)[:120]}')
 
@@ -959,12 +1003,17 @@ def main():
         print('사진 폴더 저장 완료:', d, '(서버를 다시 켜면 적용. 이미 올린 사진은 옛 폴더의 파일을 새 폴더로 옮겨 주세요)')
         return
     port = int(to_int(CONF.get('port'), 4848, 1, 65535))
-    try:
-        srv = Server(('0.0.0.0', port), H)
-    except OSError as e:
-        print('[오류] 서버를 시작하지 못했습니다:', e)
-        print(f'  포트 {port}을(를) 다른 프로그램이 쓰고 있을 수 있습니다. data\\config.json의 port를 바꿔 보세요.')
-        sys.exit(1)
+    srv = None
+    for attempt in range(15):   # 업데이트로 다시 켤 때 이전 프로세스가 포트를 놓을 때까지 잠깐 기다린다
+        try:
+            srv = Server(('0.0.0.0', port), H)
+            break
+        except OSError as e:
+            if attempt == 14:
+                print('[오류] 서버를 시작하지 못했습니다:', e)
+                print(f'  포트 {port}을(를) 다른 프로그램이 쓰고 있을 수 있습니다. data\\config.json의 port를 바꿔 보세요.')
+                sys.exit(1)
+            time.sleep(1)
     line = '=' * 70
     print(line)
     print(f'  유진·아름 사진 저장소 서버 {VERSION}   종료: 이 창에서 Ctrl+C')

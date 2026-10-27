@@ -204,7 +204,7 @@ main{padding:6px 6px calc(96px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v10';
+const VER = 'v11';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -496,6 +496,7 @@ $('#menuBtn').addEventListener('click', async () => {
     { k: 'newf', icon: I_FOLDER, label: '새 폴더', sub: '사진을 모아 둘 폴더(앨범) 만들기' },
     ...(inFolder ? [{ k: 'renf', icon: I_FOLDER, label: `'${folderName(CUR)}' 이름 바꾸기` }, { k: 'delf', icon: I_FOLDER, label: `'${folderName(CUR)}' 폴더 지우기`, sub: '빈 폴더만', red: true }] : []),
     { k: 'usage', icon: I.disk, label: '저장 공간', sub: USAGE ? `${fmtMB(USAGE.bytes)} / ${fmtMB(USAGE.max_bytes)} 사용 · 사진 ${USAGE.count}장` : '' },
+    { k: 'upd', icon: I.srv, label: '서버 업데이트 지금 확인', sub: `지금 서버 ${ME ? ME.version : ''} · 새 버전이면 받아서 다시 켜요` },
     { k: 'pub', icon: I.srv, label: '어디서든 접속 (공개 주소)', sub: ME && ME.public_url ? (ME.has_token ? `github.io 자동 연결: ${ME.published || '확인 중'}` : '공개 주소 있음 · github.io 자동 연결하려면 토큰 등록') : `공개 주소: ${ME && ME.tunnel ? ME.tunnel : '없음'}` },
     ...(ME && ME.admin ? [{ k: 'code', icon: I.key, label: ME.has_code ? '접속코드 바꾸기' : '접속코드 정하기', sub: ME.has_code ? '둘이 쓰는 접속코드 · 바꾸면 다른 폰은 다시 로그인' : '아직 없어요 — 정하면 관리자 코드 없이 들어올 수 있어요' }] : []),
     ...(isStandalone() ? [] : [{ k: 'home', icon: I.home, label: '앱으로 설치', sub: 'PC·모바일 홈 화면에 아이콘으로' }]),
@@ -509,6 +510,7 @@ $('#menuBtn').addEventListener('click', async () => {
   if (it.k === 'delf') deleteFolder(CUR);
   if (it.k === 'usage') toast(it.sub, 3000);
   if (it.k === 'pub') publicDialog();
+  if (it.k === 'upd') { toast('확인하는 중…', 2000); try { const j = await api('/api/album/update-now', { method: 'POST', json: {}, timeout: 60000 }); toast(j.result, 5000); } catch (err) { toast(err.message, 4000); } }
   if (it.k === 'srv') changeSrv();
   if (it.k === 'home') installApp();
   if (it.k === 'code') {
