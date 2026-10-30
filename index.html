@@ -204,7 +204,7 @@ main{padding:6px 6px calc(96px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v11';
+const VER = 'v12';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -362,6 +362,11 @@ async function pingInfo() {
     el.innerHTML = `서버 ${esc(j.version)} · <button type="button" id="chgSrv">서버 주소</button>`;
   } catch (err) {
     let why = err.message;
+    if (PAGES_HOST && !(await publishedSrv())) {   // github.io에서 열었는데 서버가 공개 주소를 아직 등록하지 않음 → 원인을 그대로 말한다
+      el.innerHTML = `<span class="msg warn" style="display:block;min-height:0;margin:0 0 6px">PC 서버가 공개 주소를 아직 등록하지 않았어요. 집 와이파이에서 <b>http://PC주소:4848</b>로 들어가 ⋯ 메뉴 → '어디서든 접속' → 'GitHub 토큰 등록'을 해 주세요. 그 메뉴가 없으면 PC 서버가 옛 버전이라 PC에서 start.bat을 다시 켜야 해요.</span><button type="button" id="chgSrv">서버 주소 직접 넣기</button>`;
+      const b2 = $('#chgSrv'); if (b2) b2.addEventListener('click', changeSrv);
+      return;
+    }
     try {   // 앨범 주소는 없어도 /api/me 는 모든 버전에 있다 → 서버 버전으로 원인을 가린다
       const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
       const r = await fetch(SRV + '/api/me', { cache: 'no-store', signal: ctl.signal }); clearTimeout(t);
