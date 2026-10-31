@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '1.7'
+VERSION = '1.8'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -425,9 +425,12 @@ class H(BaseHTTPRequestHandler):
             u = self.auth()
             if not u:
                 return self.err(401, '앨범 로그인이 필요합니다')
+            if path == '/api/album/github-token':   # 1.8: 로그인한 사람의 브라우저가 서버 대신 GitHub에 주소를 적을 때 쓴다
+                return self.send(200, {'ok': True, 'token': str(CONF.get('github_token') or ''), 'repo': str(CONF.get('github_repo') or '')})
             if path == '/api/album/me':
                 return self.send(200, dict(ok=True, who=u['who'], admin=True, has_code=bool(CONF.get('code_hash')), version=VERSION,
-                                           public_url=TUNNEL_URL[0], has_token=bool(CONF.get('github_token')), published=PUBLISH_STATE['msg'],
+                                           public_url=TUNNEL_URL[0], has_token=bool(CONF.get('github_token')), published=PUBLISH_STATE['msg'], published_url=PUBLISH_STATE['url'],
+                                           github_repo=str(CONF.get('github_repo') or ''),
                                            tunnel=('off' if str(CONF.get('tunnel')) == 'off' else 'on' if TUNNEL_URL[0] else TUNNEL_STATE['msg']), **usage()))
             if path == '/api/album/photos':
                 rows = q('SELECT * FROM photos ORDER BY taken DESC, ts DESC LIMIT 20000')
@@ -566,6 +569,16 @@ class H(BaseHTTPRequestHandler):
                 WEB_STATE['ts'] = time.time()
                 print(f'[화면] 폰 브라우저가 받아 온 화면 파일 {saved}개 저장', flush=True)
                 return self.send(200, {'ok': True, 'saved': saved})
+            if path == '/api/album/published':   # 1.8: 브라우저가 대신 server-url.json을 적은 뒤 알려 준다
+                b = self.body_json()
+                u2 = str(b.get('url') or '')
+                if b.get('ok') and u2:
+                    PUBLISH_STATE['msg'] = '등록됨(브라우저)'
+                    PUBLISH_STATE['url'] = u2
+                    print('[주소] 브라우저가 server-url.json을 갱신했습니다:', u2, flush=True)
+                else:
+                    PUBLISH_STATE['msg'] = '브라우저 등록 실패: ' + str(b.get('msg') or '')[:80]
+                return self.send(200, {'ok': True})
             if path == '/api/album/github-token':   # 1.4: 폰에서 GitHub 토큰 등록 → 공개 주소를 저장소에 바로 적는다
                 b = self.body_json()
                 m = re.search(r'(github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,})', str(b.get('token') or ''))
@@ -748,6 +761,7 @@ button.sub{background:#fff;color:#0B1B3F;border:2px solid #E2E5EA}pre{white-spac
 <input id="code" type="password" inputmode="numeric" placeholder="접속코드">
 <button id="b1">1. 서버가 GitHub에서 새 버전 받기 (서버·화면)</button>
 <button id="b2" class="sub">2. 화면 파일만 이 폰 브라우저가 대신 받아 넣기</button>
+<p>공개 주소가 "없음"이면: PC 브라우저로 <a href="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe">cloudflared 내려받기</a> → 파일 이름을 <b>cloudflared.exe</b>로 바꿔 <b>server</b> 폴더에 넣기 → 30초 안에 자동 시작</p>
 <input id="tok" type="password" placeholder="GitHub 토큰 (github_pat_…) — 어디서든 접속용, 한 번만">
 <button id="b4" class="sub">3. 토큰 등록 → kwonyujin119.github.io/test3 로 어디서든 접속</button>
 <button id="b3" class="sub">서버 상태 보기</button>
@@ -765,7 +779,11 @@ document.getElementById('b1').onclick=async()=>{try{await login();out('서버가
 document.getElementById('b2').onclick=async()=>{try{await login();
  out('화면 파일 받는 중…');const files={};for(const f of FILES){const r=await fetch(RAW+f+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error(f+' 받기 실패 '+r.status);const buf=new Uint8Array(await r.arrayBuffer());let s='';for(let i=0;i<buf.length;i+=0x8000)s+=String.fromCharCode.apply(null,buf.subarray(i,i+0x8000));files[f]=btoa(s);}
  const r=await fetch('/api/album/web-upload',{method:'POST',headers:H(),body:JSON.stringify({files})});const j=await r.json();if(!j.ok)throw new Error(j.error);out('화면 파일 '+j.saved+'개 넣었어요. 앨범(/)을 다시 열면 새 화면이 나와요.');}catch(e){if(e)out('실패: '+(e.message||e));}};
-document.getElementById('b4').onclick=async()=>{try{await login();const token=document.getElementById('tok').value.trim();if(!token){out('토큰을 붙여 넣어 주세요');return;}out('등록하는 중…');const r=await fetch('/api/album/github-token',{method:'POST',headers:H(),body:JSON.stringify({token})});const j=await r.json();if(!j.ok)throw new Error(j.error);document.getElementById('tok').value='';out((j.published||'')+(j.public_url?'\n공개 주소: '+j.public_url:'')+'\n\n"등록됨"이면 1~2분 뒤 https://kwonyujin119.github.io/test3/ 가 어디서든 열려요.');}catch(e){if(e)out('실패: '+(e.message||e));}};
+async function publishViaBrowser(token,repo,url){const api='https://api.github.com/repos/'+repo+'/contents/server-url.json';const hd={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'};let sha=null;try{const g=await fetch(api,{headers:hd,cache:'no-store'});if(g.ok){const cur=await g.json();sha=cur.sha;try{if(JSON.parse(atob(cur.content.replace(/\n/g,''))).url===url)return '이미 같은 주소가 등록돼 있어요';}catch(_){}}}catch(_){}
+ const body={message:'서버 주소 갱신(브라우저)',content:btoa(unescape(encodeURIComponent(JSON.stringify({url,ts:Math.floor(Date.now()/1000)}))))};if(sha)body.sha=sha;const r=await fetch(api,{method:'PUT',headers:hd,body:JSON.stringify(body)});if(!r.ok)throw new Error('GitHub 응답 '+r.status+' — 토큰 권한(test3, Contents 읽기·쓰기)을 확인');return '등록됨';}
+document.getElementById('b4').onclick=async()=>{try{await login();const token=document.getElementById('tok').value.trim();if(!token){out('토큰을 붙여 넣어 주세요');return;}out('등록하는 중…');const r=await fetch('/api/album/github-token',{method:'POST',headers:H(),body:JSON.stringify({token})});const j=await r.json();if(!j.ok)throw new Error(j.error);document.getElementById('tok').value='';
+ let msg=j.published||'';if(j.public_url&&!/^등록됨/.test(msg)){out('서버가 직접 못 적어 이 브라우저가 대신 적는 중…');try{msg=await publishViaBrowser(token,'kwonyujin119/test3',j.public_url);await fetch('/api/album/published',{method:'POST',headers:H(),body:JSON.stringify({ok:true,url:j.public_url})});}catch(e){msg='브라우저 등록 실패: '+e.message;await fetch('/api/album/published',{method:'POST',headers:H(),body:JSON.stringify({ok:false,msg:e.message})});}}
+ out(msg+(j.public_url?'\n공개 주소: '+j.public_url:'\n공개 주소가 아직 없어요(cloudflared). 위 안내대로 넣고 1분 뒤 다시 누르세요')+'\n\n"등록됨"이면 1~2분 뒤 https://kwonyujin119.github.io/test3/ 가 어디서든 열려요.');}catch(e){if(e)out('실패: '+(e.message||e));}};
 document.getElementById('b3').onclick=async()=>{out(await (await fetch('/status',{cache:'no-store'})).text());};
 </script></body></html>'''
 
@@ -783,10 +801,22 @@ def ver_tuple(v):
     return tuple(int(x) for x in re.findall(r'\d+', str(v)))
 
 
+ALT_BASE = 'https://kwonyujin119.github.io/test3'   # 1.8: raw.githubusercontent.com이 막힌 망에서는 Pages에서 받는다(같은 파일)
+
+
 def fetch_text(url, limit, timeout=30):
     import urllib.request
-    with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'album-server'}), timeout=timeout) as r:
-        return r.read(limit).decode('utf-8')
+    last = None
+    for u in (url, url.replace('https://raw.githubusercontent.com/kwonyujin119/test3/main', ALT_BASE)):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(u, headers={'User-Agent': 'album-server'}), timeout=timeout) as r:
+                return r.read(limit).decode('utf-8')
+        except Exception as e:
+            last = e
+            if u == url and ALT_BASE not in url:
+                continue
+            raise
+    raise last
 
 
 def upd_log(msg):
@@ -889,7 +919,7 @@ def find_cloudflared():
     return shutil.which('cloudflared')
 
 
-PUBLISH_STATE = {'msg': ''}
+PUBLISH_STATE = {'msg': '', 'url': ''}   # url: 저장소에 적힌 것으로 아는 주소
 TUNNEL_STATE = {'msg': '준비 중'}
 
 
@@ -912,6 +942,7 @@ def publish_url(url):
                 old = json.loads(base64.b64decode(cur.get('content') or '').decode('utf-8'))
                 if old.get('url') == url:
                     PUBLISH_STATE['msg'] = '등록됨'
+                    PUBLISH_STATE['url'] = url
                     print('[주소] server-url.json이 이미 같은 주소입니다.', flush=True)
                     return
             except Exception:
@@ -928,10 +959,11 @@ def publish_url(url):
         with urllib.request.urlopen(req, timeout=30) as r:
             r.read()
         PUBLISH_STATE['msg'] = '등록됨'
+        PUBLISH_STATE['url'] = url
         print('[주소] server-url.json 갱신 완료 — 1~2분 뒤 https://kwonyujin119.github.io/test3/ 가 이 서버로 붙습니다.', flush=True)
     except Exception as e:
-        PUBLISH_STATE['msg'] = '갱신 실패: ' + str(e)[:80]
-        print('[주소] server-url.json 갱신 실패:', str(e)[:160], '— 토큰이 test3 저장소 Contents 읽기·쓰기 권한인지 확인', flush=True)
+        PUBLISH_STATE['msg'] = '서버가 직접 등록 실패(' + str(e)[:60] + ') — 앨범 화면을 열면 브라우저가 대신 등록'
+        print('[주소] server-url.json 갱신 실패:', str(e)[:160], '— 앨범 화면(폰·PC)을 열면 브라우저가 대신 등록합니다', flush=True)
 
 
 def ensure_cloudflared():
@@ -977,8 +1009,15 @@ def update_web():
     errors = []
     for rel in WEB_FILES:
         try:
-            with urllib.request.urlopen(urllib.request.Request(f'{base}/{rel}?t={int(time.time())}', headers={'User-Agent': 'album-server'}), timeout=30) as r:
-                data = r.read(20_000_000)
+            data = None
+            for b2 in (base, ALT_BASE):
+                try:
+                    with urllib.request.urlopen(urllib.request.Request(f'{b2}/{rel}?t={int(time.time())}', headers={'User-Agent': 'album-server'}), timeout=30) as r:
+                        data = r.read(20_000_000)
+                    break
+                except Exception as e2:
+                    if b2 == ALT_BASE:
+                        raise e2
             if rel == 'index.html' and (len(data) < 10_000 or b'</html>' not in data):
                 raise ValueError('index.html 모양이 아님')
             fp = os.path.join(wd, rel)
@@ -1018,9 +1057,10 @@ def tunnel_loop(port):
     """cloudflared로 공개 주소(https://…trycloudflare.com)를 만든다. 서버를 다시 켜면 주소가 바뀐다 → publish_url이 저장소에 적는다."""
     import subprocess
     exe = ensure_cloudflared()
-    if not exe:
-        TUNNEL_STATE['msg'] = TUNNEL_STATE['msg'] if 'cloudflared' in TUNNEL_STATE['msg'] else 'cloudflared 없음'
-        return
+    while not exe:   # 내려받기에 실패해도(인증서 문제 등) server 폴더에 cloudflared.exe를 넣어 주면 30초 안에 시작한다
+        TUNNEL_STATE['msg'] = (TUNNEL_STATE['msg'] if 'cloudflared' in TUNNEL_STATE['msg'] else 'cloudflared 없음') + ' — server 폴더에 cloudflared.exe를 넣으면 바로 시작'
+        time.sleep(30)
+        exe = find_cloudflared()
     TUNNEL_STATE['msg'] = '공개 주소 만드는 중'
     while True:
         try:
