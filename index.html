@@ -58,8 +58,21 @@ header{position:sticky;top:0;z-index:5;background:var(--navy);color:#fff;padding
 .chips button small{opacity:.7;font-weight:500;margin-left:3px}
 .chips button[aria-pressed=true]{background:var(--yellow);color:var(--navy)}
 .chips button.new{border:1.5px dashed rgba(255,255,255,.5);background:transparent}
+.chips[hidden]{display:none}
+.ib.fold svg{transition:transform .2s}.ib.fold.on svg{transform:rotate(180deg)}
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:10px 6px 0}
+@media(min-width:560px){.cards{grid-template-columns:repeat(3,1fr)}}@media(min-width:820px){.cards{grid-template-columns:repeat(4,1fr)}}
+.card{position:relative;aspect-ratio:1;border-radius:16px;overflow:hidden;background:#DDE2EA;box-shadow:0 2px 8px rgba(11,27,63,.12);text-align:left}
+.card img{width:100%;height:100%;object-fit:cover;display:block}
+.card .cap{position:absolute;left:0;right:0;bottom:0;padding:26px 12px 10px;background:linear-gradient(transparent,rgba(6,8,14,.75));color:#fff}
+.card .cap b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.card .cap small{font-size:12px;opacity:.85}
+.card.empty-cover{display:grid;place-items:center;color:var(--muted)}.card.empty-cover svg{width:40px;height:40px;fill:none;stroke:var(--ocean);stroke-width:1.6}
+.card.new{border:2px dashed var(--line-2,#C5CBD4);background:transparent;box-shadow:none;display:grid;place-items:center;color:var(--ocean);font-weight:700}
+.more{display:block;width:calc(100% - 12px);margin:12px 6px 0;padding:12px;border-radius:12px;background:#fff;border:1.5px solid var(--line);font-weight:700;color:var(--ocean)}
+.secttl{margin:14px 10px 4px;font-weight:800;font-size:15px}.secttl small{font-weight:500;color:var(--muted);margin-left:6px}
 .chips button[aria-pressed=true] small{opacity:.8}
-.hrow .ttl{flex:1;min-width:0;font-weight:800;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hrow .ttl{flex:1;min-width:0;font-weight:800;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.hrow .ttl:active{opacity:.7}
 .hrow .ttl small{display:block;font-weight:500;font-size:12px;color:#C9D3EA}
 .ib{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;color:#fff}
 .ib:active{background:rgba(255,255,255,.12)}
@@ -128,7 +141,7 @@ body.sel #fab{display:none}
 .vbot{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:12px 10px calc(10px + var(--sab));background:linear-gradient(transparent,rgba(0,0,0,.7));transition:opacity .2s}
 .vmemo{min-height:20px;margin:0 8px 10px;font-size:14px;white-space:pre-wrap;word-break:break-word}
 .vmemo:empty::before{content:'메모 없음 — 아래 메모 버튼으로 남기기';color:#8B96AE;font-size:13px}
-.vbtns{display:grid;grid-template-columns:repeat(5,1fr);gap:2px}
+.vbtns{display:grid;grid-template-columns:repeat(5,1fr);gap:2px}.vbtns.noadmin{grid-template-columns:repeat(4,1fr)}
 .vbtns button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px;border-radius:12px;font-size:12px;color:#fff}
 .vbtns button:active{background:rgba(255,255,255,.1)}
 .vbtns svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -171,6 +184,7 @@ body.sel #fab{display:none}
   <header>
     <div class="hrow">
       <div class="ttl">유진 · 아름 사진 저장소<small id="hsub">불러오는 중…</small></div>
+      <button class="ib fold on" id="foldBtn" aria-label="폴더 줄 접기/펼치기" hidden><svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg></button>
       <button class="ib" id="selBtn" aria-label="선택"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></svg></button>
       <button class="ib" id="refreshBtn" aria-label="새로고침"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></button>
       <button class="ib" id="menuBtn" aria-label="메뉴"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></svg></button>
@@ -215,7 +229,7 @@ body.sel #fab{display:none}
 <script>
 (() => {
 'use strict';
-const VER = 'v14';
+const VER = 'v15';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -237,7 +251,9 @@ let SRV = (qsSrv || LS.get('album.srv') || DEF_SRV).replace(/\/+$/, '');
 if (badSrv(SRV) || SELF_SERVED) { SRV = DEF_SRV; LS.del('album.srv'); }
 else if (qsSrv) LS.set('album.srv', SRV);
 let TOKEN = LS.get('album.token') || '', ME = null, PHOTOS = [], USAGE = null, lastLoad = 0;
-let FOLDERS = [], CUR = 'all';   // CUR: 'all' = 전체, '' = 폴더 없음(기본), 그 밖에는 폴더 id
+let FOLDERS = [], CUR = 'home';   // CUR: 'home' = 첫 화면(폴더별 대표사진), 'all' = 전체 사진, '' = 폴더 없음, 그 밖에는 폴더 id
+const PREF = { get homeN() { return +(LS.get('album.homeN') ?? 8); }, get pageN() { return +(LS.get('album.pageN') ?? 60); }, get chips() { return LS.get('album.chips') !== '0'; } };
+let homeMore = false, pages = 1;   // 첫 화면 '더 보기' 펼침, 폴더 안 사진 쪽수
 
 // ---------- 서버 호출
 async function api(path, { method = 'GET', body = null, json = null, timeout = 30000 } = {}) {
@@ -250,7 +266,7 @@ async function api(path, { method = 'GET', body = null, json = null, timeout = 3
   catch (e) { clearTimeout(t); throw new Error(SELF_SERVED ? '서버에 연결할 수 없어요. PC의 사진 저장소 서버 창이 켜져 있는지 확인해 주세요' : '서버에 연결할 수 없어요. 폰에서는 서버 PC 창에 적힌 주소(http://…:4848)로 열어 주세요'); }
   clearTimeout(t);
   let j = null; try { j = await r.json(); } catch (_) {}
-  if (r.status === 401 && TOKEN && path !== '/api/album/login') { logoutLocal(); throw new Error('다시 로그인해 주세요'); }
+  if (r.status === 401 && TOKEN && !/\/api\/album\/(login|admin-login)$/.test(path)) { logoutLocal(); throw new Error('다시 로그인해 주세요'); }
   if (!j) throw new Error(`서버 응답이 이상해요 (HTTP ${r.status}, ${SRV.replace(/^https?:\/\//, '')}) — 서버 주소를 확인하세요`);
   if (!r.ok || !j.ok) throw new Error(j.error || ('오류 ' + r.status));
   return j;
@@ -406,7 +422,7 @@ async function changeSrv() {
   SRV = nv; pingRetried = false; if (nv === DEF_SRV) LS.del('album.srv'); else LS.set('album.srv', nv);
   toast('서버 주소를 바꿨어요'); pingInfo();
 }
-function logoutLocal() { TOKEN = ''; ME = null; PHOTOS = []; LS.del('album.token'); if (vOpen) hideViewer(); showLogin(); }
+function logoutLocal() { TOKEN = ''; ME = null; PHOTOS = []; CUR = 'home'; LS.del('album.token'); if (typeof SEL !== 'undefined' && SEL) selOff(); if (vOpen) hideViewer(); showLogin(); }
 function showLogin() { $('#main').hidden = true; $('#viewer').hidden = true; $('#login').hidden = false; pingInfo(); }
 
 // ---------- 메인
@@ -447,18 +463,29 @@ async function enter() {
 }
 function paintHead() {
   if (!USAGE) return;
-  $('#hsub').textContent = `사진 ${USAGE.count}장 · ${fmtMB(USAGE.bytes)} 사용`;
+  const inF = CUR !== 'home';
+  $('#hsub').textContent = inF ? `${folderName(CUR)} · ${visible().length}장${ME && ME.admin ? ' · 관리자' : ''}` : `폴더 ${FOLDERS.length}개 · 사진 ${USAGE.count}장 · ${fmtMB(USAGE.bytes)}${ME && ME.admin ? ' · 관리자' : ''}`;
+  $('#foldBtn').hidden = !inF; $('#foldBtn').classList.toggle('on', PREF.chips);
+  $('#chips').hidden = !inF || !PREF.chips;
+  document.querySelector('.vbtns').classList.toggle('noadmin', !(ME && ME.admin));
+  $('#vDel').hidden = !(ME && ME.admin); $('#selDel').hidden = !(ME && ME.admin);
 }
+// 제목을 누르면 첫 화면으로
+document.querySelector('.hrow .ttl').addEventListener('click', () => goHome());
+function goHome() { if (CUR === 'home') { window.scrollTo(0, 0); return; } if (STACK.length) closeTop(); else { CUR = 'home'; render(); } window.scrollTo(0, 0); }
+function openFolder(id) { if (SEL) selOff(); CUR = id; pages = 1; if (!STACK.length) pushLayer(() => { CUR = 'home'; pages = 1; if (SEL) selOff(); render(); }); render(); window.scrollTo(0, 0); }
+$('#foldBtn').addEventListener('click', () => { LS.set('album.chips', PREF.chips ? '0' : '1'); paintHead(); measureHead(); });
 async function load(quiet) {
   try {
     const j = await api('/api/album/photos', { timeout: 60000 });
     PHOTOS = j.photos; USAGE = j; FOLDERS = j.folders || []; lastLoad = Date.now();
-    if (CUR !== 'all' && CUR !== '' && !FOLDERS.some(f => f.id === CUR)) CUR = 'all';
+    if (!['home', 'all', ''].includes(CUR) && !FOLDERS.some(f => f.id === CUR)) CUR = 'home';
     paintHead(); render();
   } catch (err) { if (!quiet) toast(err.message); }
 }
-const visible = () => CUR === 'all' ? PHOTOS : PHOTOS.filter(p => (p.folder || '') === CUR);
-const folderName = id => id === 'all' ? '전체' : id === '' ? '폴더 없음' : ((FOLDERS.find(f => f.id === id) || {}).name || '폴더');
+const visible = () => CUR === 'home' || CUR === 'all' ? PHOTOS : PHOTOS.filter(p => (p.folder || '') === CUR);
+const folderName = id => id === 'home' ? '첫 화면' : id === 'all' ? '전체 사진' : id === '' ? '폴더 없음' : ((FOLDERS.find(f => f.id === id) || {}).name || '폴더');
+const coverOf = id => { const f = FOLDERS.find(x => x.id === id); if (f && f.cover && PHOTOS.some(p => p.id === f.cover)) return f.cover; const first = PHOTOS.find(p => (p.folder || '') === id); return first ? first.id : ''; };
 const I_FOLDER = '<svg viewBox="0 0 24 24"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>';
 function renderChips() {
   const cnt = id => PHOTOS.filter(p => (p.folder || '') === id).length;
@@ -467,13 +494,32 @@ function renderChips() {
   $('#chips').innerHTML = items.map(([id, name, n]) => `<button type="button" data-f="${esc(id)}" aria-pressed="${String(id === CUR)}">${esc(name)}<small>${n}</small></button>`).join('') + '<button type="button" class="new" data-new="1">+ 새 폴더</button>';
   measureHead();
 }
+function renderHome() {
+  const root = $('#grid');
+  const cnt = id => PHOTOS.filter(p => (p.folder || '') === id).length;
+  const entries = FOLDERS.map(f => ({ id: f.id, name: f.name, n: cnt(f.id), cover: coverOf(f.id) }));
+  if (cnt('')) entries.push({ id: '', name: '폴더 없음', n: cnt(''), cover: coverOf('') });
+  const limit = PREF.homeN || entries.length;
+  const shown = homeMore ? entries : entries.slice(0, limit);
+  const card = e => `<button type="button" class="card ${e.cover ? '' : 'empty-cover'}" data-open="${esc(e.id)}">${e.cover ? `<img loading="lazy" decoding="async" src="${thumbUrl(e.cover)}" alt="">` : I_FOLDER}<span class="cap"><b>${esc(e.name)}</b><small>${e.n}장</small></span></button>`;
+  let html = '';
+  if (!entries.length) html += `<div class="empty"><b>아직 폴더가 없어요</b>아래 '+ 새 폴더'로 만들고, 그 안에서 + 를 눌러 올려 보세요</div>`;
+  html += `<div class="cards">${shown.map(card).join('')}<button type="button" class="card new" data-new="1">+ 새 폴더</button></div>`;
+  if (!homeMore && entries.length > limit) html += `<button type="button" class="more" data-more="1">폴더 ${entries.length - limit}개 더 보기</button>`;
+  if (PHOTOS.length) html += `<button type="button" class="more" data-open="all">전체 사진 보기 (${PHOTOS.length}장)</button>`;
+  root.innerHTML = html;
+}
 function render() {
+  paintHead();
+  if (CUR === 'home') { renderHome(); return; }
   renderChips();
-  const list = visible(); const root = $('#grid');
-  if (!list.length) {
+  const all = visible(); const root = $('#grid');
+  if (!all.length) {
     root.innerHTML = `<div class="empty"><b>${CUR === 'all' ? '아직 사진이 없어요' : esc(folderName(CUR)) + ' 폴더가 비어 있어요'}</b>오른쪽 아래 + 를 눌러 올려 보세요${CUR === 'all' ? '' : '(이 폴더에 들어가요)'}</div>`;
     return;
   }
+  const limit = PREF.pageN ? PREF.pageN * pages : all.length;
+  const list = all.slice(0, limit);
   const groups = new Map();
   for (const p of list) { const k = monthKey(dateOf(p)); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
   let html = '';
@@ -482,6 +528,7 @@ function render() {
     for (const p of arr) html += `<button type="button" class="tile" data-id="${p.id}"><img loading="lazy" decoding="async" src="${thumbUrl(p.id)}" alt="">${p.memo ? '<span class="m"></span>' : ''}</button>`;
     html += '</div>';
   }
+  if (all.length > list.length) html += `<button type="button" class="more" data-more="1">사진 ${all.length - list.length}장 더 보기</button>`;
   root.innerHTML = html;
   paintSel();
 }
@@ -499,6 +546,12 @@ $('#grid').addEventListener('touchmove', () => { lpMoved = true; clearTimeout(lp
 $('#grid').addEventListener('touchend', () => clearTimeout(lpT), { passive: true });
 $('#grid').addEventListener('contextmenu', e => { const t = e.target.closest('.tile'); if (t) { e.preventDefault(); if (!SEL) selOn(t.dataset.id); } });
 $('#grid').addEventListener('click', e => {
+  const c = e.target.closest('[data-open],[data-more],[data-new]');
+  if (c && !e.target.closest('.tile')) {
+    if (c.dataset.new) return newFolder();
+    if (c.dataset.more) { if (CUR === 'home') homeMore = true; else pages++; render(); return; }
+    openFolder(c.dataset.open); return;
+  }
   const t = e.target.closest('.tile'); if (!t) return;
   if (SEL) { if (SEL.has(t.dataset.id)) SEL.delete(t.dataset.id); else SEL.add(t.dataset.id); paintSel(); return; }
   openViewer(t.dataset.id);
@@ -534,12 +587,12 @@ $('#selMove').addEventListener('click', async () => {
   selOff(); render();
   toast(fail ? `${done}장 옮김 · ${fail}장 실패` : `${done}장을 '${folderName(dest)}'(으)로 옮겼어요`, 2500);
 });
-$('#chips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.new) return newFolder(); CUR = b.dataset.f; if (SEL) selOff(); render(); window.scrollTo(0, 0); });
+$('#chips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.new) return newFolder(); openFolder(b.dataset.f); });
 // ---------- 폴더(앨범): 접속한 사람 누구나 만들고 이름을 바꾸고(빈 폴더는) 지울 수 있다. PC의 사진 폴더에도 같은 이름의 폴더가 생긴다
 async function newFolder() {
   const v = await dialog({ title: '새 폴더', text: '폴더 이름(예: 2026 가을 여행). PC의 사진 폴더 안에도 같은 이름의 폴더가 생겨요.', placeholder: '폴더 이름', okText: '만들기' });
   if (v === null || !v.trim()) return;
-  try { const j = await api('/api/album/folders', { method: 'POST', json: { name: v.trim() } }); FOLDERS = j.folders; CUR = j.folder.id; render(); toast(`'${j.folder.name}' 폴더를 만들었어요`, 1800); }
+  try { const j = await api('/api/album/folders', { method: 'POST', json: { name: v.trim() } }); FOLDERS = j.folders; openFolder(j.folder.id); toast(`'${j.folder.name}' 폴더를 만들었어요 — + 로 사진을 올려 보세요`, 2200); }
   catch (err) { toast(err.message, 3000); }
 }
 async function renameFolder(id) {
@@ -555,14 +608,20 @@ async function deleteFolder(id) {
   if (n) { toast(`'${f.name}'에 사진이 ${n}장 있어요. 먼저 옮기거나 지워 주세요`, 3200); return; }
   const ok = await dialog({ title: `'${f.name}' 폴더를 지울까요?`, text: '빈 폴더만 지울 수 있어요.', noInput: true, okText: '지우기', danger: true });
   if (!ok) return;
-  try { const j = await api(`/api/album/folders/${id}`, { method: 'DELETE' }); FOLDERS = j.folders; CUR = 'all'; render(); toast('폴더를 지웠어요', 1500); }
+  try { const j = await api(`/api/album/folders/${id}`, { method: 'DELETE' }); FOLDERS = j.folders; goHome(); render(); toast('폴더를 지웠어요', 1500); }
   catch (err) { toast(err.message, 3000); }
 }
 async function movePhoto(p) {
-  const items = [{ k: '', icon: I_FOLDER, label: '폴더 없음', sub: '기본 위치' }, ...FOLDERS.map(f => ({ k: f.id, icon: I_FOLDER, label: f.name, sub: `${PHOTOS.filter(x => x.folder === f.id).length}장` })), { k: '__new', icon: I_FOLDER, label: '+ 새 폴더 만들어 옮기기' }];
-  const it = await sheet(`'${folderName(p.folder || '')}' → 어느 폴더로?`, items.filter(x => x.k !== (p.folder || '')));
+  const f0 = FOLDERS.find(f => f.id === p.folder);
+  const items = [...(f0 ? [{ k: '__cover', icon: I.pick, label: `이 사진을 '${f0.name}' 대표사진으로`, sub: f0.cover === p.id ? '지금 대표사진' : '첫 화면 카드에 보여요' }] : []),
+    { k: '', icon: I_FOLDER, label: '폴더 없음', sub: '기본 위치' }, ...FOLDERS.map(f => ({ k: f.id, icon: I_FOLDER, label: f.name, sub: `${PHOTOS.filter(x => x.folder === f.id).length}장` })), { k: '__new', icon: I_FOLDER, label: '+ 새 폴더 만들어 옮기기' }];
+  const it = await sheet(f0 ? `'${f0.name}' 사진` : '어느 폴더로?', items.filter(x => x.k !== (p.folder || '')));
   if (!it) return;
   let dest = it.k;
+  if (dest === '__cover') {
+    try { const j = await api(`/api/album/folders/${f0.id}`, { method: 'POST', json: { cover: p.id } }); FOLDERS = j.folders; toast(`'${f0.name}' 대표사진으로 정했어요`, 1800); } catch (err) { toast(err.message, 3000); }
+    return;
+  }
   if (dest === '__new') {
     const v = await dialog({ title: '새 폴더', placeholder: '폴더 이름', okText: '만들기' }); if (v === null || !v.trim()) return;
     try { const j = await api('/api/album/folders', { method: 'POST', json: { name: v.trim() } }); FOLDERS = j.folders; dest = j.folder.id; } catch (err) { toast(err.message, 3000); return; }
@@ -584,10 +643,14 @@ const I = {
   cam: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
 };
 $('#menuBtn').addEventListener('click', async () => {
-  const inFolder = CUR !== 'all' && CUR !== '';
+  const inFolder = !['home', 'all', ''].includes(CUR);
+  const admin = !!(ME && ME.admin);
   const items = [
+    { k: 'adm', icon: I.key, label: admin ? '관리자 로그아웃' : '관리자 로그인', sub: admin ? '지금 관리자 — 사진·폴더를 지울 수 있어요' : '관리자 코드를 넣으면 사진·폴더 지우기가 열려요' },
     { k: 'newf', icon: I_FOLDER, label: '새 폴더', sub: '사진을 모아 둘 폴더(앨범) 만들기' },
-    ...(inFolder ? [{ k: 'renf', icon: I_FOLDER, label: `'${folderName(CUR)}' 이름 바꾸기` }, { k: 'delf', icon: I_FOLDER, label: `'${folderName(CUR)}' 폴더 지우기`, sub: '빈 폴더만', red: true }] : []),
+    ...(inFolder ? [{ k: 'renf', icon: I_FOLDER, label: `'${folderName(CUR)}' 이름 바꾸기` }] : []),
+    ...(inFolder && admin ? [{ k: 'delf', icon: I_FOLDER, label: `'${folderName(CUR)}' 폴더 지우기`, sub: '빈 폴더만', red: true }] : []),
+    { k: 'view', icon: I.pick, label: '보기 설정', sub: `첫 화면 폴더 ${PREF.homeN || '전체'}개 · 폴더 안 사진 ${PREF.pageN || '전체'}장씩` },
     { k: 'usage', icon: I.disk, label: '저장 공간', sub: USAGE ? `${fmtMB(USAGE.bytes)} / ${fmtMB(USAGE.max_bytes)} 사용 · 사진 ${USAGE.count}장` : '' },
     { k: 'upd', icon: I.srv, label: '서버 업데이트 지금 확인', sub: `지금 서버 ${ME ? ME.version : ''} · 새 버전이면 받아서 다시 켜요` },
     { k: 'pub', icon: I.srv, label: '어디서든 접속 (공개 주소)', sub: ME && ME.public_url ? (ME.has_token ? `github.io 자동 연결: ${ME.published || '확인 중'}` : '공개 주소 있음 · github.io 자동 연결하려면 토큰 등록') : `공개 주소: ${ME && ME.tunnel ? ME.tunnel : '없음'}` },
@@ -599,6 +662,21 @@ $('#menuBtn').addEventListener('click', async () => {
   const it = await sheet(`앨범 ${VER} · 서버 ${ME ? ME.version : ''}`, items);
   if (!it) return;
   if (it.k === 'newf') newFolder();
+  if (it.k === 'adm') {
+    if (admin) { try { await api('/api/album/admin-logout', { method: 'POST', json: {} }); } catch (_) {} ME.admin = false; paintHead(); toast('관리자에서 나왔어요', 1500); }
+    else {
+      const v = await dialog({ title: '관리자 로그인', text: '관리자 코드를 넣으면 이 폰에서 사진·폴더를 지울 수 있어요.', password: true, placeholder: '관리자 코드', okText: '로그인' });
+      if (v === null || !v.trim()) return;
+      try { await api('/api/album/admin-login', { method: 'POST', json: { code: v.trim() } }); ME.admin = true; paintHead(); toast('관리자로 들어왔어요', 1500); } catch (err) { toast(err.message, 3000); }
+    }
+  }
+  if (it.k === 'view') {
+    const pick = await sheet('첫 화면에 보일 폴더 수', [4, 8, 12, 0].map(n => ({ k: 'h' + n, icon: I_FOLDER, label: n ? `${n}개` : '전체', sub: PREF.homeN === n ? '지금 설정' : '' })));
+    if (pick) { LS.set('album.homeN', String(+pick.k.slice(1))); homeMore = false; }
+    const pick2 = await sheet('폴더 안에서 한 번에 보일 사진 수', [30, 60, 120, 0].map(n => ({ k: 'p' + n, icon: I.pick, label: n ? `${n}장씩` : '전체', sub: PREF.pageN === n ? '지금 설정' : '' })));
+    if (pick2) { LS.set('album.pageN', String(+pick2.k.slice(1))); pages = 1; }
+    render();
+  }
   if (it.k === 'renf') renameFolder(CUR);
   if (it.k === 'delf') deleteFolder(CUR);
   if (it.k === 'usage') toast(it.sub, 3000);
@@ -636,7 +714,7 @@ function addFiles(files) {
   const imgs = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(f.name));
   if (!imgs.length) { toast('사진 파일만 올릴 수 있어요'); return; }
   if (imgs.length < files.length) toast(`사진이 아닌 파일 ${files.length - imgs.length}개는 뺐어요`);
-  if (!upQueue.length && !upBusy) { upDone = 0; upFail = []; upStop = false; }
+  if (!upQueue.length && !upBusy) { upDone = 0; upFail = []; upStop = false; if (CUR === 'home' || CUR === 'all') toast("'폴더 없음'에 올려요. 폴더 안에서 올리면 그 폴더에 들어가요", 2500); }
   upQueue.push(...imgs);
   pump();
 }
@@ -651,7 +729,7 @@ async function pump() {
     try {
       const meta = await prepImage(f);
       const taken = (await exifTaken(f)) || f.lastModified || Date.now();
-      const qs = new URLSearchParams({ name: f.name.slice(0, 120), taken: String(Math.round(taken)), w: String(meta.w), h: String(meta.h), folder: (CUR === 'all' ? '' : CUR) });
+      const qs = new URLSearchParams({ name: f.name.slice(0, 120), taken: String(Math.round(taken)), w: String(meta.w), h: String(meta.h), folder: (CUR === 'all' || CUR === 'home' ? '' : CUR) });
       upUI(`${n}/${tot()} 올리는 중 · ${f.name}`, 0);
       const j = await xhrUpload(`${SRV}/api/album/upload?${qs}`, f, fr => upUI(`${n}/${tot()} 올리는 중 · ${f.name} · ${Math.round(fr * 100)}%`, fr));
       if (meta.thumb) { try { await xhrUpload(`${SRV}/api/album/thumb/${j.photo.id}`, meta.thumb); j.photo.thumb = true; } catch (_) {} }

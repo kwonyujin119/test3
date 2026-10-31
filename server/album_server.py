@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '1.8'
+VERSION = '1.9'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -32,6 +32,7 @@ LOGIN_FAILS, LOGIN_WINDOW = 8, 600    # 10분에 8번 틀리면 잠금
 CODE_SALT = b'yujin-areum-album'
 # 기본 접속코드(사용자가 정한 값)의 해시만 둔다(코드 자체는 적지 않음) — 바꾸기: set-code.bat
 CODE_HASH_DEFAULT = '911093919025a304c8438e4e5fcfb1fa49f803b17fe838f77a413ce8eeb7458f'
+ADMIN_HASH_DEFAULT = 'cea62a928c673a3c54974f6274943efe1f52a642d8649789427063f72968d502'   # 1.9: 관리자 코드(사용자 지정)의 해시 — 관리자만 사진·폴더를 지울 수 있다. 바꾸기: --set-admin-code
 
 
 def code_hash(code):
@@ -47,6 +48,7 @@ def load_conf():
     defaults = {
         'port': 4848,
         'code_hash': CODE_HASH_DEFAULT,                 # 접속코드(해시로만 저장)
+        'admin_code_hash': ADMIN_HASH_DEFAULT,          # 1.9: 관리자 코드(해시로만 저장)
         'photos_dir': os.path.join(BASE, '사진'),       # 사진이 저장되는 폴더(다른 드라이브·폴더로 바꿀 수 있음)
         'max_store_mb': 20480,                          # 사진 총량(MB)
         'allowed_origins': ['https://kwonyujin119.github.io'],   # 화면(github.io)에서 오는 요청 허용
@@ -129,6 +131,12 @@ try:   # 1.3: 사진이 속한 폴더(앨범). 빈 값이면 기본(폴더 없�
     DB.execute('ALTER TABLE photos ADD COLUMN folder TEXT DEFAULT \'\'')
 except sqlite3.OperationalError:
     pass
+for _sql in ('ALTER TABLE sessions ADD COLUMN admin INTEGER DEFAULT 0',   # 1.9: 관리자 로그인 표시
+             'ALTER TABLE folders ADD COLUMN cover TEXT DEFAULT \'\''):   # 1.9: 폴더 대표사진
+    try:
+        DB.execute(_sql)
+    except sqlite3.OperationalError:
+        pass
 DB.commit()
 
 
@@ -139,7 +147,7 @@ def folder_name_ok(name):
 
 
 def folder_row(r, counts):
-    return {'id': r['id'], 'name': r['name'], 'ts': r['ts'], 'count': counts.get(r['id'], 0)}
+    return {'id': r['id'], 'name': r['name'], 'ts': r['ts'], 'count': counts.get(r['id'], 0), 'cover': (r['cover'] if 'cover' in r.keys() else '') or ''}
 
 
 def folders_out():
@@ -371,7 +379,7 @@ class H(BaseHTTPRequestHandler):
             return None
         if now - (r['seen'] or 0) > 600:
             q('UPDATE sessions SET seen=? WHERE token=?', (now, r['token']), commit=True)
-        return {'who': r['who'] or '', 'token': r['token']}
+        return {'who': r['who'] or '', 'token': r['token'], 'admin': bool(r['admin'] if 'admin' in r.keys() else 0)}
 
     # --- 라우팅
     def do_OPTIONS(self):
@@ -428,7 +436,7 @@ class H(BaseHTTPRequestHandler):
             if path == '/api/album/github-token':   # 1.8: 로그인한 사람의 브라우저가 서버 대신 GitHub에 주소를 적을 때 쓴다
                 return self.send(200, {'ok': True, 'token': str(CONF.get('github_token') or ''), 'repo': str(CONF.get('github_repo') or '')})
             if path == '/api/album/me':
-                return self.send(200, dict(ok=True, who=u['who'], admin=True, has_code=bool(CONF.get('code_hash')), version=VERSION,
+                return self.send(200, dict(ok=True, who=u['who'], admin=u['admin'], has_code=bool(CONF.get('code_hash')), version=VERSION,
                                            public_url=TUNNEL_URL[0], has_token=bool(CONF.get('github_token')), published=PUBLISH_STATE['msg'], published_url=PUBLISH_STATE['url'],
                                            github_repo=str(CONF.get('github_repo') or ''),
                                            tunnel=('off' if str(CONF.get('tunnel')) == 'off' else 'on' if TUNNEL_URL[0] else TUNNEL_STATE['msg']), **usage()))
@@ -471,6 +479,28 @@ class H(BaseHTTPRequestHandler):
             u = self.auth()
             if not u:
                 return self.err(401, '앨범 로그인이 필요합니다')
+            if path == '/api/album/admin-login':   # 1.9: 관리자 코드로 이 로그인에 관리자 표시(삭제 권한)
+                ip = self.ip()
+                now = time.time()
+                key = 'admin:' + ip
+                with FAILS_LOCK:
+                    lst = [t for t in FAILS.get(key, []) if now - t < LOGIN_WINDOW]
+                    FAILS[key] = lst
+                    if len(lst) >= LOGIN_FAILS:
+                        return self.err(429, '여러 번 틀려 10분간 잠겼습니다')
+                b = self.body_json()
+                code = str(b.get('code') or '')
+                h = str(conf_disk('admin_code_hash') or '')
+                if not (h and re.sub(r'[\s\-]', '', code) and secrets.compare_digest(code_hash(code), h)):
+                    with FAILS_LOCK:
+                        FAILS.setdefault(key, []).append(now)
+                    return self.send(403, {'ok': False, 'error': '관리자 코드가 맞지 않습니다'})
+                q('UPDATE sessions SET admin=1 WHERE token=?', (u['token'],), commit=True)
+                print(f'[앨범] 관리자 로그인 ({ip})', flush=True)
+                return self.send(200, {'ok': True, 'admin': True})
+            if path == '/api/album/admin-logout':
+                q('UPDATE sessions SET admin=0 WHERE token=?', (u['token'],), commit=True)
+                return self.send(200, {'ok': True, 'admin': False})
             if path == '/api/album/logout':
                 q('DELETE FROM sessions WHERE token=?', (u['token'],), commit=True)
                 return self.send(200, {'ok': True})
@@ -497,6 +527,13 @@ class H(BaseHTTPRequestHandler):
                 f = q('SELECT * FROM folders WHERE id=?', (m.group(1),), one=True)
                 if not f:
                     return self.err(404, '폴더가 없어요')
+                if 'cover' in b:   # 1.9: 대표사진 정하기(빈 값이면 자동: 최근 사진)
+                    cov = str(b.get('cover') or '')
+                    if cov and not q('SELECT id FROM photos WHERE id=?', (cov,), one=True):
+                        return self.err(404, '사진이 없어요')
+                    q('UPDATE folders SET cover=? WHERE id=?', (cov, f['id']), commit=True)
+                    if 'name' not in b:
+                        return self.send(200, dict(ok=True, **folders_out()))
                 name = folder_name_ok(b.get('name'))
                 if not name:
                     return self.err(400, '폴더 이름을 적어 주세요')
@@ -621,6 +658,8 @@ class H(BaseHTTPRequestHandler):
             u = self.auth()
             if not u:
                 return self.err(401, '앨범 로그인이 필요합니다')
+            if not u['admin']:   # 1.9: 지우기는 관리자만(⋯ 메뉴 → 관리자 로그인)
+                return self.err(403, '지우기는 관리자만 할 수 있어요 (⋯ 메뉴 → 관리자 로그인)')
             mf = re.fullmatch(r'/api/album/folders/([a-f0-9]{16})', path)
             if mf:   # 1.3: 빈 폴더만 지울 수 있다(사진이 있으면 먼저 옮기거나 지우기)
                 f = q('SELECT * FROM folders WHERE id=?', (mf.group(1),), one=True)
@@ -651,6 +690,7 @@ class H(BaseHTTPRequestHandler):
                 except OSError as e:
                     print('[앨범] 파일 삭제 실패:', p, e, flush=True)
             q('DELETE FROM photos WHERE id=?', (r['id'],), commit=True)
+            q("UPDATE folders SET cover='' WHERE cover=?", (r['id'],), commit=True)
             print(f"[앨범] 삭제: {r['name']} ({(r['size'] or 0) // 1024}KB)", flush=True)
             return self.send(200, dict(ok=True, **usage()))
         except (ConnectionError, TimeoutError, OSError):
@@ -686,7 +726,7 @@ class H(BaseHTTPRequestHandler):
         q('INSERT INTO sessions(token,who,created,seen,ip) VALUES(?,?,?,?,?)', (th(token), who, now, now, ip), commit=True)
         q('DELETE FROM sessions WHERE seen<?', (now - SESSION_DAYS * 86400,), commit=True)
         print(f'[앨범] 로그인 ({ip})', flush=True)
-        return self.send(200, {'ok': True, 'token': token, 'who': who, 'admin': True, 'has_code': True})
+        return self.send(200, {'ok': True, 'token': token, 'who': who, 'admin': False, 'has_code': True})
 
     def upload(self, u, args):
         n = self.clen()
@@ -1107,6 +1147,15 @@ def main():
         CONF['code_hash'] = code_hash(new)
         write_conf(CONF)
         print('접속코드 저장 완료 (config.json에는 해시로만 저장). 이미 켜진 서버도 다음 로그인부터 새 코드를 씁니다.')
+        return
+    if '--set-admin-code' in sys.argv:
+        new = re.sub(r'[\s\-]', '', ' '.join(sys.argv[sys.argv.index('--set-admin-code') + 1:]))
+        if len(new) < 4:
+            print('관리자 코드는 4자 이상으로 정하세요.')
+            sys.exit(1)
+        CONF['admin_code_hash'] = code_hash(new)
+        write_conf(CONF)
+        print('관리자 코드 저장 완료 (config.json에는 해시로만 저장).')
         return
     if '--set-github-token' in sys.argv:
         raw = ' '.join(sys.argv[sys.argv.index('--set-github-token') + 1:])
