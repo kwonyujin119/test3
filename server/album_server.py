@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '1.5'
+VERSION = '1.6'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -393,6 +393,27 @@ class H(BaseHTTPRequestHandler):
         path, _, qs = self.path.partition('?')
         args = urllib.parse.parse_qs(qs)
         try:
+            if path == '/status':   # 1.6: 서버 상태(비밀값 없음) — 폰에서 열어 원인을 본다
+                try:
+                    with open(os.path.join(DATA, 'update.log'), encoding='utf-8', errors='replace') as f:
+                        log = ''.join(f.readlines()[-12:])
+                except OSError:
+                    log = '(기록 없음)'
+                wd = web_dir()
+                ver = ''
+                if wd:
+                    try:
+                        mm = re.search(r"const VER = '(v\d+)'", open(os.path.join(wd, 'index.html'), encoding='utf-8', errors='replace').read())
+                        ver = mm.group(1) if mm else '?'
+                    except OSError:
+                        pass
+                body = (f'사진 저장소 서버 {VERSION}\n\n화면 폴더: {wd or "(없음)"}  화면 버전: {ver}\n화면 갱신: {WEB_STATE["msg"]}\n'
+                        f'공개 주소: {TUNNEL_URL[0] or "(없음) " + TUNNEL_STATE["msg"]}\n주소 등록(server-url.json): {PUBLISH_STATE["msg"] or "-"}\n'
+                        f'GitHub 토큰: {"있음" if CONF.get("github_token") else "없음"}\n사진 폴더: {PHOTOS}\n\n최근 기록:\n{log}\n\n'
+                        f'문제가 있으면 /update 를 여세요.')
+                return self.send(200, body, 'text/plain; charset=utf-8')
+            if path == '/update':   # 1.6: 업데이트 도우미(내장 화면) — web 폴더가 없어도 열린다
+                return self.send(200, UPDATE_PAGE.replace('__VER__', VERSION), 'text/html; charset=utf-8')
             if path in ('/', '/index.html') or re.fullmatch(r'/(manifest\.webmanifest|sw\.js|icons/[A-Za-z0-9_\-]+\.png|img/[A-Za-z0-9_\-]+\.jpg)', path):
                 return self.web_get('index.html' if path == '/' else path.lstrip('/'))
             if path == '/healthz':
@@ -514,12 +535,37 @@ class H(BaseHTTPRequestHandler):
                 try:
                     msg = check_update()
                 except Exception as e:
-                    return self.send(200, {'ok': True, 'result': '확인 실패: ' + str(e)[:100], 'version': VERSION})
+                    msg = '서버 확인 실패: ' + str(e)[:100]
                 try:
-                    update_web()
-                except Exception:
-                    pass
-                return self.send(200, {'ok': True, 'result': msg, 'version': VERSION})
+                    web = update_web()
+                except Exception as e:
+                    web = '화면 갱신 실패: ' + str(e)[:80]
+                return self.send(200, {'ok': True, 'result': f'{msg} · 화면: {web}', 'version': VERSION})
+            if path == '/api/album/web-upload':   # 1.6: 폰 브라우저가 GitHub에서 받은 화면 파일(정해진 8개만)을 web 폴더에 넣는다 {files:{rel: base64}}
+                import base64
+                b = self.body_json(limit=6_000_000)
+                files = b.get('files') if isinstance(b.get('files'), dict) else {}
+                wd = os.path.join(BASE, 'web')
+                saved = 0
+                for rel, b64 in files.items():
+                    if rel not in WEB_FILES:
+                        continue
+                    try:
+                        data = base64.b64decode(str(b64))
+                    except Exception:
+                        continue
+                    if rel == 'index.html' and (len(data) < 10_000 or b'</html>' not in data or b'const VER = ' not in data):
+                        return self.err(400, 'index.html 모양이 아닙니다')
+                    fp = os.path.join(wd, rel)
+                    os.makedirs(os.path.dirname(fp), exist_ok=True)
+                    with open(fp + '.new', 'wb') as f:
+                        f.write(data)
+                    os.replace(fp + '.new', fp)
+                    saved += 1
+                WEB_STATE['msg'] = f'브라우저로 {saved}개 받음'
+                WEB_STATE['ts'] = time.time()
+                print(f'[화면] 폰 브라우저가 받아 온 화면 파일 {saved}개 저장', flush=True)
+                return self.send(200, {'ok': True, 'saved': saved})
             if path == '/api/album/github-token':   # 1.4: 폰에서 GitHub 토큰 등록 → 공개 주소를 저장소에 바로 적는다
                 b = self.body_json()
                 m = re.search(r'(github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,})', str(b.get('token') or ''))
@@ -692,6 +738,35 @@ class H(BaseHTTPRequestHandler):
             f.write(data)
         q('UPDATE photos SET thumb=1 WHERE id=?', (fid,), commit=True)
         return self.send(200, {'ok': True})
+
+
+UPDATE_PAGE = r'''<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>업데이트 도우미</title>
+<style>body{font:15px/1.5 -apple-system,"Malgun Gothic",sans-serif;margin:0;padding:20px;background:#F3F4F6;color:#0B1B3F}h1{font-size:19px;margin:0 0 4px}p{color:#5F6672;margin:4px 0 14px;font-size:13px}
+input{width:100%;box-sizing:border-box;padding:12px;border:2px solid #E2E5EA;border-radius:12px;font-size:17px;margin-bottom:10px}button{display:block;width:100%;padding:13px;border:0;border-radius:12px;background:#0B1B3F;color:#FDD000;font-weight:800;font-size:15px;margin-bottom:8px}
+button.sub{background:#fff;color:#0B1B3F;border:2px solid #E2E5EA}pre{white-space:pre-wrap;word-break:break-all;background:#fff;border-radius:12px;padding:12px;font-size:12px;min-height:60px}a{color:#244EA2}</style></head><body>
+<h1>사진 저장소 업데이트 도우미</h1><p>서버 __VER__ · 이 화면은 서버 안에 들어 있어 화면 파일이 없어도 열려요.</p>
+<input id="code" type="password" inputmode="numeric" placeholder="접속코드">
+<button id="b1">1. 서버가 GitHub에서 새 버전 받기 (서버·화면)</button>
+<button id="b2" class="sub">2. 화면 파일만 이 폰 브라우저가 대신 받아 넣기</button>
+<button id="b3" class="sub">서버 상태 보기</button>
+<pre id="out">버튼을 누르면 결과가 여기에 나와요.</pre>
+<p><a href="/">← 앨범으로</a></p>
+<script>
+const RAW='https://raw.githubusercontent.com/kwonyujin119/test3/main/';
+const FILES=['index.html','manifest.webmanifest','sw.js','icons/icon-192.png','icons/icon-512.png','icons/icon-maskable-512.png','icons/apple-touch-icon.png','img/login.jpg'];
+const out=m=>{document.getElementById('out').textContent=m;};
+let TOKEN='';
+async function login(){const code=document.getElementById('code').value.trim();if(!code){out('접속코드를 넣어 주세요');throw 0;}
+ const r=await fetch('/api/album/login',{method:'POST',headers:{'X-ALBUM':'1','Content-Type':'application/json'},body:JSON.stringify({code})});const j=await r.json();if(!j.ok){out(j.error||'로그인 실패');throw 0;}TOKEN=j.token;}
+const H=()=>({'X-ALBUM':'1','Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'});
+document.getElementById('b1').onclick=async()=>{try{await login();out('서버가 GitHub에서 받는 중…');const r=await fetch('/api/album/update-now',{method:'POST',headers:H(),body:'{}'});const j=await r.json();out((j.result||JSON.stringify(j))+'
+
+새 버전을 받았다면 30초 뒤 이 페이지를 새로고침해 서버 번호를 확인하세요.');}catch(e){if(e)out('실패: '+e.message);}};
+document.getElementById('b2').onclick=async()=>{try{await login();
+ out('화면 파일 받는 중…');const files={};for(const f of FILES){const r=await fetch(RAW+f+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error(f+' 받기 실패 '+r.status);const buf=new Uint8Array(await r.arrayBuffer());let s='';for(let i=0;i<buf.length;i+=0x8000)s+=String.fromCharCode.apply(null,buf.subarray(i,i+0x8000));files[f]=btoa(s);}
+ const r=await fetch('/api/album/web-upload',{method:'POST',headers:H(),body:JSON.stringify({files})});const j=await r.json();if(!j.ok)throw new Error(j.error);out('화면 파일 '+j.saved+'개 넣었어요. 앨범(/)을 다시 열면 새 화면이 나와요.');}catch(e){if(e)out('실패: '+(e.message||e));}};
+document.getElementById('b3').onclick=async()=>{out(await (await fetch('/status',{cache:'no-store'})).text());};
+</script></body></html>'''
 
 
 class Server(ThreadingHTTPServer):
@@ -886,6 +961,7 @@ def ensure_cloudflared():
         return None
 
 
+WEB_STATE = {'msg': '아직 안 받음', 'ts': 0}
 WEB_FILES = ['index.html', 'manifest.webmanifest', 'sw.js', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'img/login.jpg']
 
 
@@ -897,6 +973,7 @@ def update_web():
         return
     wd = os.path.join(BASE, 'web')
     changed = 0
+    errors = []
     for rel in WEB_FILES:
         try:
             with urllib.request.urlopen(urllib.request.Request(f'{base}/{rel}?t={int(time.time())}', headers={'User-Agent': 'album-server'}), timeout=30) as r:
@@ -912,20 +989,28 @@ def update_web():
             os.replace(fp + '.new', fp)
             changed += 1
         except Exception as e:
+            errors.append(f'{rel}: {str(e)[:90]}')
             print('[화면]', rel, '받기 실패:', str(e)[:100], flush=True)
             if rel == 'index.html':
-                return
+                WEB_STATE['msg'] = '받기 실패: ' + str(e)[:90]
+                upd_log('화면 파일 받기 실패: ' + str(e)[:120])
+                return WEB_STATE['msg']
+    WEB_STATE['msg'] = (f'{changed}개 갱신' if changed else '이미 최신') + (f' (실패 {len(errors)})' if errors else '')
+    WEB_STATE['ts'] = time.time()
     if changed:
         print(f'[화면] 화면 파일 {changed}개 갱신(web 폴더)', flush=True)
+    return WEB_STATE['msg']
 
 
 def web_update_loop():
     while True:
+        ok = False
         try:
-            update_web()
+            ok = not str(update_web() or '').startswith('받기 실패')
         except Exception as e:
+            WEB_STATE['msg'] = '갱신 실패: ' + str(e)[:90]
             print('[화면] 갱신 실패:', str(e)[:100], flush=True)
-        time.sleep(max(5, float(CONF.get('update_check_min') or 10)) * 60)
+        time.sleep((max(5, float(CONF.get('update_check_min') or 10)) * 60) if ok else 60)
 
 
 def tunnel_loop(port):

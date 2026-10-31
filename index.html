@@ -73,6 +73,15 @@ main{padding:6px 6px calc(96px + var(--sab))}
 .tile{position:relative;aspect-ratio:1;overflow:hidden;background:#DDE2EA;border-radius:4px}
 .tile img{width:100%;height:100%;object-fit:cover;display:block}
 .tile .m{position:absolute;right:5px;top:5px;width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 1.5px var(--ocean)}
+body.sel .tile::after{content:'';position:absolute;left:6px;top:6px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.25);box-shadow:0 1px 3px rgba(0,0,0,.4)}
+body.sel .tile.on::after{background:var(--yellow);border-color:var(--yellow);content:'✓';color:var(--navy);font-weight:900;font-size:15px;line-height:22px;text-align:center}
+body.sel .tile.on img{opacity:.55}
+#selbar{position:fixed;left:12px;right:12px;bottom:calc(16px + var(--sab));z-index:7;display:flex;align-items:center;gap:6px;padding:8px 8px 8px 14px;border-radius:16px;background:var(--navy);color:#fff;box-shadow:0 10px 26px rgba(11,27,63,.35)}
+#selbar b{flex:1;font-size:14px}
+#selbar button{padding:9px 12px;border-radius:10px;background:rgba(255,255,255,.14);color:#fff;font-weight:700;font-size:13px}
+#selbar button.red{background:#D92D20}
+#selbar button.all{background:transparent;color:#C9D3EA;text-decoration:underline;padding:9px 6px}
+body.sel #fab{display:none}
 .empty{margin:60px 20px;text-align:center;color:var(--muted)}
 .empty b{display:block;margin-bottom:6px;color:var(--ink);font-size:17px}
 #fab{position:fixed;right:18px;bottom:calc(20px + var(--sab));z-index:6;display:grid;place-items:center;width:60px;height:60px;border-radius:20px;background:var(--yellow);color:var(--navy);box-shadow:0 10px 26px rgba(11,27,63,.35)}
@@ -162,6 +171,7 @@ main{padding:6px 6px calc(96px + var(--sab))}
   <header>
     <div class="hrow">
       <div class="ttl">유진 · 아름 사진 저장소<small id="hsub">불러오는 중…</small></div>
+      <button class="ib" id="selBtn" aria-label="선택"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></svg></button>
       <button class="ib" id="refreshBtn" aria-label="새로고침"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></button>
       <button class="ib" id="menuBtn" aria-label="메뉴"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></svg></button>
     </div>
@@ -172,6 +182,7 @@ main{padding:6px 6px calc(96px + var(--sab))}
     <div class="row"><b id="upTxt"></b><button type="button" id="upCancel">그만</button></div>
     <div class="bar"><i id="upFill"></i></div>
   </div>
+  <div id="selbar" hidden><b id="selCnt">0장 선택</b><button type="button" class="all" id="selAll">모두</button><button type="button" id="selMove">폴더 이동</button><button type="button" class="red" id="selDel">삭제</button><button type="button" id="selOff">취소</button></div>
   <button id="fab" aria-label="사진 올리기"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
 </div>
 
@@ -204,7 +215,7 @@ main{padding:6px 6px calc(96px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v12';
+const VER = 'v13';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -444,9 +455,58 @@ function render() {
     html += '</div>';
   }
   root.innerHTML = html;
+  paintSel();
 }
-$('#grid').addEventListener('click', e => { const t = e.target.closest('.tile'); if (!t) return; openViewer(t.dataset.id); });
-$('#chips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.new) return newFolder(); CUR = b.dataset.f; render(); window.scrollTo(0, 0); });
+// ---------- 여러 장 선택(격자에서 바로 지우기·옮기기): 오른쪽 위 ☑ 버튼 또는 사진을 길게 누르면 시작
+let SEL = null;   // null = 보통 모드, Set = 선택된 사진 id
+function selOn(firstId) { SEL = new Set(firstId ? [firstId] : []); document.body.classList.add('sel'); $('#selbar').hidden = false; paintSel(); }
+function selOff() { SEL = null; document.body.classList.remove('sel'); $('#selbar').hidden = true; document.querySelectorAll('.tile.on').forEach(t => t.classList.remove('on')); }
+function paintSel() { if (!SEL) return; document.querySelectorAll('.tile').forEach(t => t.classList.toggle('on', SEL.has(t.dataset.id))); $('#selCnt').textContent = `${SEL.size}장 선택`; $('#selMove').disabled = $('#selDel').disabled = !SEL.size; }
+$('#selBtn').addEventListener('click', () => { if (SEL) selOff(); else selOn(); });
+$('#selOff').addEventListener('click', selOff);
+$('#selAll').addEventListener('click', () => { if (!SEL) return; const ids = visible().map(p => p.id); if (ids.every(id => SEL.has(id))) SEL.clear(); else ids.forEach(id => SEL.add(id)); paintSel(); });
+let lpT = 0, lpMoved = false;
+$('#grid').addEventListener('touchstart', e => { const t = e.target.closest('.tile'); if (!t || SEL) return; lpMoved = false; clearTimeout(lpT); lpT = setTimeout(() => { if (!lpMoved) { selOn(t.dataset.id); if (navigator.vibrate) navigator.vibrate(15); } }, 500); }, { passive: true });
+$('#grid').addEventListener('touchmove', () => { lpMoved = true; clearTimeout(lpT); }, { passive: true });
+$('#grid').addEventListener('touchend', () => clearTimeout(lpT), { passive: true });
+$('#grid').addEventListener('contextmenu', e => { const t = e.target.closest('.tile'); if (t) { e.preventDefault(); if (!SEL) selOn(t.dataset.id); } });
+$('#grid').addEventListener('click', e => {
+  const t = e.target.closest('.tile'); if (!t) return;
+  if (SEL) { if (SEL.has(t.dataset.id)) SEL.delete(t.dataset.id); else SEL.add(t.dataset.id); paintSel(); return; }
+  openViewer(t.dataset.id);
+});
+$('#selDel').addEventListener('click', async () => {
+  if (!SEL || !SEL.size) return;
+  const n = SEL.size;
+  const ok = await dialog({ title: `사진 ${n}장을 지울까요?`, text: '서버(PC)에서도 지워져요. 되돌릴 수 없어요.', noInput: true, okText: `${n}장 지우기`, danger: true });
+  if (!ok) return;
+  let done = 0, fail = 0;
+  for (const id of [...SEL]) {
+    try { const j = await api(`/api/album/photos/${id}`, { method: 'DELETE' }); PHOTOS = PHOTOS.filter(x => x.id !== id); USAGE = j; done++; toast(`지우는 중 ${done}/${n}`, 800); }
+    catch (_) { fail++; }
+  }
+  selOff(); paintHead(); render();
+  toast(fail ? `${done}장 지움 · ${fail}장 실패` : `${done}장 지웠어요`, 2500);
+});
+$('#selMove').addEventListener('click', async () => {
+  if (!SEL || !SEL.size) return;
+  const items = [{ k: '', icon: I_FOLDER, label: '폴더 없음', sub: '기본 위치' }, ...FOLDERS.map(f => ({ k: f.id, icon: I_FOLDER, label: f.name })), { k: '__new', icon: I_FOLDER, label: '+ 새 폴더 만들어 옮기기' }];
+  const it = await sheet(`${SEL.size}장을 어느 폴더로?`, items);
+  if (!it) return;
+  let dest = it.k;
+  if (dest === '__new') {
+    const v = await dialog({ title: '새 폴더', placeholder: '폴더 이름', okText: '만들기' }); if (v === null || !v.trim()) return;
+    try { const j = await api('/api/album/folders', { method: 'POST', json: { name: v.trim() } }); FOLDERS = j.folders; dest = j.folder.id; } catch (err) { toast(err.message, 3000); return; }
+  }
+  let done = 0, fail = 0;
+  for (const id of [...SEL]) {
+    const p = PHOTOS.find(x => x.id === id); if (!p || (p.folder || '') === dest) { done++; continue; }
+    try { const j = await api(`/api/album/photos/${id}`, { method: 'POST', json: { folder: dest } }); Object.assign(p, j.photo); done++; } catch (_) { fail++; }
+  }
+  selOff(); render();
+  toast(fail ? `${done}장 옮김 · ${fail}장 실패` : `${done}장을 '${folderName(dest)}'(으)로 옮겼어요`, 2500);
+});
+$('#chips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.new) return newFolder(); CUR = b.dataset.f; if (SEL) selOff(); render(); window.scrollTo(0, 0); });
 // ---------- 폴더(앨범): 접속한 사람 누구나 만들고 이름을 바꾸고(빈 폴더는) 지울 수 있다. PC의 사진 폴더에도 같은 이름의 폴더가 생긴다
 async function newFolder() {
   const v = await dialog({ title: '새 폴더', text: '폴더 이름(예: 2026 가을 여행). PC의 사진 폴더 안에도 같은 이름의 폴더가 생겨요.', placeholder: '폴더 이름', okText: '만들기' });
