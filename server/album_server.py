@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '1.6'
+VERSION = '1.7'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -748,6 +748,8 @@ button.sub{background:#fff;color:#0B1B3F;border:2px solid #E2E5EA}pre{white-spac
 <input id="code" type="password" inputmode="numeric" placeholder="접속코드">
 <button id="b1">1. 서버가 GitHub에서 새 버전 받기 (서버·화면)</button>
 <button id="b2" class="sub">2. 화면 파일만 이 폰 브라우저가 대신 받아 넣기</button>
+<input id="tok" type="password" placeholder="GitHub 토큰 (github_pat_…) — 어디서든 접속용, 한 번만">
+<button id="b4" class="sub">3. 토큰 등록 → kwonyujin119.github.io/test3 로 어디서든 접속</button>
 <button id="b3" class="sub">서버 상태 보기</button>
 <pre id="out">버튼을 누르면 결과가 여기에 나와요.</pre>
 <p><a href="/">← 앨범으로</a></p>
@@ -763,6 +765,7 @@ document.getElementById('b1').onclick=async()=>{try{await login();out('서버가
 document.getElementById('b2').onclick=async()=>{try{await login();
  out('화면 파일 받는 중…');const files={};for(const f of FILES){const r=await fetch(RAW+f+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error(f+' 받기 실패 '+r.status);const buf=new Uint8Array(await r.arrayBuffer());let s='';for(let i=0;i<buf.length;i+=0x8000)s+=String.fromCharCode.apply(null,buf.subarray(i,i+0x8000));files[f]=btoa(s);}
  const r=await fetch('/api/album/web-upload',{method:'POST',headers:H(),body:JSON.stringify({files})});const j=await r.json();if(!j.ok)throw new Error(j.error);out('화면 파일 '+j.saved+'개 넣었어요. 앨범(/)을 다시 열면 새 화면이 나와요.');}catch(e){if(e)out('실패: '+(e.message||e));}};
+document.getElementById('b4').onclick=async()=>{try{await login();const token=document.getElementById('tok').value.trim();if(!token){out('토큰을 붙여 넣어 주세요');return;}out('등록하는 중…');const r=await fetch('/api/album/github-token',{method:'POST',headers:H(),body:JSON.stringify({token})});const j=await r.json();if(!j.ok)throw new Error(j.error);document.getElementById('tok').value='';out((j.published||'')+(j.public_url?'\n공개 주소: '+j.public_url:'')+'\n\n"등록됨"이면 1~2분 뒤 https://kwonyujin119.github.io/test3/ 가 어디서든 열려요.');}catch(e){if(e)out('실패: '+(e.message||e));}};
 document.getElementById('b3').onclick=async()=>{out(await (await fetch('/status',{cache:'no-store'})).text());};
 </script></body></html>'''
 
