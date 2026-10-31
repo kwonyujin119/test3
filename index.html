@@ -229,7 +229,7 @@ body.sel #fab{display:none}
 <script>
 (() => {
 'use strict';
-const VER = 'v15';
+const VER = 'v16';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -466,6 +466,7 @@ function paintHead() {
   const inF = CUR !== 'home';
   $('#hsub').textContent = inF ? `${folderName(CUR)} · ${visible().length}장${ME && ME.admin ? ' · 관리자' : ''}` : `폴더 ${FOLDERS.length}개 · 사진 ${USAGE.count}장 · ${fmtMB(USAGE.bytes)}${ME && ME.admin ? ' · 관리자' : ''}`;
   $('#foldBtn').hidden = !inF; $('#foldBtn').classList.toggle('on', PREF.chips);
+  $('#selBtn').hidden = !inF;   // 첫 화면(폴더 카드)에서는 선택할 사진이 없다
   $('#chips').hidden = !inF || !PREF.chips;
   document.querySelector('.vbtns').classList.toggle('noadmin', !(ME && ME.admin));
   $('#vDel').hidden = !(ME && ME.admin); $('#selDel').hidden = !(ME && ME.admin);
