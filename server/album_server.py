@@ -759,9 +759,7 @@ let TOKEN='';
 async function login(){const code=document.getElementById('code').value.trim();if(!code){out('접속코드를 넣어 주세요');throw 0;}
  const r=await fetch('/api/album/login',{method:'POST',headers:{'X-ALBUM':'1','Content-Type':'application/json'},body:JSON.stringify({code})});const j=await r.json();if(!j.ok){out(j.error||'로그인 실패');throw 0;}TOKEN=j.token;}
 const H=()=>({'X-ALBUM':'1','Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'});
-document.getElementById('b1').onclick=async()=>{try{await login();out('서버가 GitHub에서 받는 중…');const r=await fetch('/api/album/update-now',{method:'POST',headers:H(),body:'{}'});const j=await r.json();out((j.result||JSON.stringify(j))+'
-
-새 버전을 받았다면 30초 뒤 이 페이지를 새로고침해 서버 번호를 확인하세요.');}catch(e){if(e)out('실패: '+e.message);}};
+document.getElementById('b1').onclick=async()=>{try{await login();out('서버가 GitHub에서 받는 중…');const r=await fetch('/api/album/update-now',{method:'POST',headers:H(),body:'{}'});const j=await r.json();out((j.result||JSON.stringify(j))+'\n\n새 버전을 받았다면 30초 뒤 이 페이지를 새로고침해 서버 번호를 확인하세요.');}catch(e){if(e)out('실패: '+e.message);}};
 document.getElementById('b2').onclick=async()=>{try{await login();
  out('화면 파일 받는 중…');const files={};for(const f of FILES){const r=await fetch(RAW+f+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error(f+' 받기 실패 '+r.status);const buf=new Uint8Array(await r.arrayBuffer());let s='';for(let i=0;i<buf.length;i+=0x8000)s+=String.fromCharCode.apply(null,buf.subarray(i,i+0x8000));files[f]=btoa(s);}
  const r=await fetch('/api/album/web-upload',{method:'POST',headers:H(),body:JSON.stringify({files})});const j=await r.json();if(!j.ok)throw new Error(j.error);out('화면 파일 '+j.saved+'개 넣었어요. 앨범(/)을 다시 열면 새 화면이 나와요.');}catch(e){if(e)out('실패: '+(e.message||e));}};
