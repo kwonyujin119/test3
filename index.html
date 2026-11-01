@@ -14,13 +14,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="유진·아름 사진">
 <meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
 :root{color-scheme:light;--navy:#0B1B3F;--navy-2:#13285A;--ocean:#244EA2;--ocean-soft:#EAF0FA;--yellow:#FDD000;--yellow-soft:#FFF4B8;
   --bg:#F3F4F6;--card:#fff;--line:#E2E5EA;--ink:#0B1B3F;--muted:#5F6672;--danger:#D92D20;--ok:#067647;
   --sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%}
-body{font:15px/1.45 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;background:var(--bg);color:var(--ink);overscroll-behavior-y:none}
+body{font:15px/1.45 "Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;letter-spacing:-.01em;background:var(--bg);color:var(--ink);overscroll-behavior-y:none}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 input,textarea{font:inherit}
 [hidden]{display:none!important}
@@ -78,12 +79,14 @@ header{position:sticky;top:0;z-index:5;background:var(--navy);color:#fff;padding
 .ib:active{background:rgba(255,255,255,.12)}
 .ib svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 main{padding:6px 6px calc(96px + var(--sab))}
-.month{position:sticky;top:var(--hh,106px);z-index:2;margin:10px 4px 6px;display:flex;align-items:baseline;gap:8px;padding:6px 8px;border-radius:10px;background:rgba(243,244,246,.92);backdrop-filter:blur(6px);font-weight:800;font-size:15px}
+.month{position:sticky;top:var(--hh,106px);z-index:2;margin:12px 4px 6px;display:flex;align-items:baseline;gap:8px;padding:6px 8px;border-radius:10px;background:rgba(243,244,246,.9);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font-weight:800;font-size:16px}
 .month small{font-weight:500;color:var(--muted);font-size:12px}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
 @media(min-width:560px){.grid{grid-template-columns:repeat(4,1fr)}}
 @media(min-width:820px){.grid{grid-template-columns:repeat(6,1fr)}main{padding-left:12px;padding-right:12px}}
-.tile{position:relative;aspect-ratio:1;overflow:hidden;background:#DDE2EA;border-radius:4px}
+.tile{position:relative;aspect-ratio:1;overflow:hidden;background:#E6E9EF;border-radius:2px}
+.tile img{opacity:0;transition:opacity .25s}.tile img.ld{opacity:1}
+.tile .f{position:absolute;right:5px;bottom:4px;width:18px;height:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}.tile .f svg{width:18px;height:18px;fill:#FF4D6D;stroke:#fff;stroke-width:1.5}
 .tile img{width:100%;height:100%;object-fit:cover;display:block}
 .tile .m{position:absolute;right:5px;top:5px;width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 1.5px var(--ocean)}
 body.sel .tile::after{content:'';position:absolute;left:6px;top:6px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.25);box-shadow:0 1px 3px rgba(0,0,0,.4)}
@@ -97,6 +100,11 @@ body.sel .tile.on img{opacity:.55}
 body.sel #fab{display:none}
 .empty{margin:60px 20px;text-align:center;color:var(--muted)}
 .empty b{display:block;margin-bottom:6px;color:var(--ink);font-size:17px}
+#topBtn{position:fixed;right:24px;bottom:calc(92px + var(--sab));z-index:6;display:grid;place-items:center;width:48px;height:48px;border-radius:50%;background:#fff;color:var(--navy);box-shadow:0 6px 18px rgba(11,27,63,.25);opacity:0;pointer-events:none;transition:opacity .2s}
+#topBtn.on{opacity:1;pointer-events:auto}
+#topBtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+body.sel #topBtn{bottom:calc(84px + var(--sab))}
+.chips button.fav[aria-pressed=true]{background:#FF4D6D;color:#fff}
 #fab{position:fixed;right:18px;bottom:calc(20px + var(--sab));z-index:6;display:grid;place-items:center;width:60px;height:60px;border-radius:20px;background:var(--yellow);color:var(--navy);box-shadow:0 10px 26px rgba(11,27,63,.35)}
 #fab svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round}
 #upbar{position:fixed;left:12px;right:90px;bottom:calc(22px + var(--sab));z-index:6;padding:10px 12px;border-radius:14px;background:var(--navy);color:#fff;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
@@ -141,7 +149,8 @@ body.sel #fab{display:none}
 .vbot{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:12px 10px calc(10px + var(--sab));background:linear-gradient(transparent,rgba(0,0,0,.7));transition:opacity .2s}
 .vmemo{min-height:20px;margin:0 8px 10px;font-size:14px;white-space:pre-wrap;word-break:break-word}
 .vmemo:empty::before{content:'메모 없음 — 아래 메모 버튼으로 남기기';color:#8B96AE;font-size:13px}
-.vbtns{display:grid;grid-template-columns:repeat(5,1fr);gap:2px}.vbtns.noadmin{grid-template-columns:repeat(4,1fr)}
+.vbtns{display:grid;grid-template-columns:repeat(6,1fr);gap:0}.vbtns.noadmin{grid-template-columns:repeat(5,1fr)}
+#vFav.on{color:#FF4D6D}#vFav.on svg{fill:#FF4D6D;stroke:#FF4D6D}
 .vbtns button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px;border-radius:12px;font-size:12px;color:#fff}
 .vbtns button:active{background:rgba(255,255,255,.1)}
 .vbtns svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -196,7 +205,8 @@ body.sel #fab{display:none}
     <div class="row"><b id="upTxt"></b><button type="button" id="upCancel">그만</button></div>
     <div class="bar"><i id="upFill"></i></div>
   </div>
-  <div id="selbar" hidden><b id="selCnt">0장 선택</b><button type="button" class="all" id="selAll">모두</button><button type="button" id="selMove">폴더 이동</button><button type="button" class="red" id="selDel">삭제</button><button type="button" id="selOff">취소</button></div>
+  <div id="selbar" hidden><b id="selCnt">0장 선택</b><button type="button" class="all" id="selAll">모두</button><button type="button" id="selFav">♡</button><button type="button" id="selMove">폴더 이동</button><button type="button" class="red" id="selDel">삭제</button><button type="button" id="selOff">취소</button></div>
+  <button id="topBtn" aria-label="맨 위로"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
   <button id="fab" aria-label="사진 올리기"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
 </div>
 
@@ -214,6 +224,7 @@ body.sel #fab{display:none}
     <div class="vmemo" id="vmemo"></div>
     <div class="vbtns">
       <button id="vMemo"><svg viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z"/></svg>메모</button>
+      <button id="vFav"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>좋아요</button>
       <button id="vMove"><svg viewBox="0 0 24 24"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M12 11v6M9 14l3-3 3 3"/></svg>폴더</button>
       <button id="vSave"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>저장</button>
       <button id="vShare"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></svg>공유</button>
@@ -229,7 +240,7 @@ body.sel #fab{display:none}
 <script>
 (() => {
 'use strict';
-const VER = 'v16';
+const VER = 'v17';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -253,7 +264,7 @@ else if (qsSrv) LS.set('album.srv', SRV);
 let TOKEN = LS.get('album.token') || '', ME = null, PHOTOS = [], USAGE = null, lastLoad = 0;
 let FOLDERS = [], CUR = 'home';   // CUR: 'home' = 첫 화면(폴더별 대표사진), 'all' = 전체 사진, '' = 폴더 없음, 그 밖에는 폴더 id
 const PREF = { get homeN() { return +(LS.get('album.homeN') ?? 8); }, get pageN() { return +(LS.get('album.pageN') ?? 60); }, get chips() { return LS.get('album.chips') !== '0'; } };
-let homeMore = false, pages = 1;   // 첫 화면 '더 보기' 펼침, 폴더 안 사진 쪽수
+let homeMore = false, pages = 1, FAV_ONLY = false;   // 첫 화면 '더 보기' 펼침, 폴더 안 사진 쪽수, ♡만 보기
 
 // ---------- 서버 호출
 async function api(path, { method = 'GET', body = null, json = null, timeout = 30000 } = {}) {
@@ -474,7 +485,7 @@ function paintHead() {
 // 제목을 누르면 첫 화면으로
 document.querySelector('.hrow .ttl').addEventListener('click', () => goHome());
 function goHome() { if (CUR === 'home') { window.scrollTo(0, 0); return; } if (STACK.length) closeTop(); else { CUR = 'home'; render(); } window.scrollTo(0, 0); }
-function openFolder(id) { if (SEL) selOff(); CUR = id; pages = 1; if (!STACK.length) pushLayer(() => { CUR = 'home'; pages = 1; if (SEL) selOff(); render(); }); render(); window.scrollTo(0, 0); }
+function openFolder(id) { if (SEL) selOff(); CUR = id; pages = 1; FAV_ONLY = false; if (!STACK.length) pushLayer(() => { CUR = 'home'; pages = 1; if (SEL) selOff(); render(); }); render(); window.scrollTo(0, 0); }
 $('#foldBtn').addEventListener('click', () => { LS.set('album.chips', PREF.chips ? '0' : '1'); paintHead(); measureHead(); });
 async function load(quiet) {
   try {
@@ -484,7 +495,7 @@ async function load(quiet) {
     paintHead(); render();
   } catch (err) { if (!quiet) toast(err.message); }
 }
-const visible = () => CUR === 'home' || CUR === 'all' ? PHOTOS : PHOTOS.filter(p => (p.folder || '') === CUR);
+const visible = () => (CUR === 'home' || CUR === 'all' ? PHOTOS : PHOTOS.filter(p => (p.folder || '') === CUR)).filter(p => !FAV_ONLY || p.fav);
 const folderName = id => id === 'home' ? '첫 화면' : id === 'all' ? '전체 사진' : id === '' ? '폴더 없음' : ((FOLDERS.find(f => f.id === id) || {}).name || '폴더');
 const coverOf = id => { const f = FOLDERS.find(x => x.id === id); if (f && f.cover && PHOTOS.some(p => p.id === f.cover)) return f.cover; const first = PHOTOS.find(p => (p.folder || '') === id); return first ? first.id : ''; };
 const I_FOLDER = '<svg viewBox="0 0 24 24"><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>';
@@ -492,7 +503,8 @@ function renderChips() {
   const cnt = id => PHOTOS.filter(p => (p.folder || '') === id).length;
   const items = [['all', '전체', PHOTOS.length], ...FOLDERS.map(f => [f.id, f.name, cnt(f.id)])];
   if (FOLDERS.length) items.splice(1, 0, ['', '폴더 없음', cnt('')]);
-  $('#chips').innerHTML = items.map(([id, name, n]) => `<button type="button" data-f="${esc(id)}" aria-pressed="${String(id === CUR)}">${esc(name)}<small>${n}</small></button>`).join('') + '<button type="button" class="new" data-new="1">+ 새 폴더</button>';
+  const favN = (CUR === 'all' ? PHOTOS : PHOTOS.filter(p => (p.folder || '') === CUR)).filter(p => p.fav).length;
+  $('#chips').innerHTML = `<button type="button" class="fav" data-fav="1" aria-pressed="${String(FAV_ONLY)}">♡ 좋아요<small>${favN}</small></button>` + items.map(([id, name, n]) => `<button type="button" data-f="${esc(id)}" aria-pressed="${String(id === CUR && !FAV_ONLY)}">${esc(name)}<small>${n}</small></button>`).join('') + '<button type="button" class="new" data-new="1">+ 새 폴더</button>';
   measureHead();
 }
 function renderHome() {
@@ -502,7 +514,8 @@ function renderHome() {
   if (cnt('')) entries.push({ id: '', name: '폴더 없음', n: cnt(''), cover: coverOf('') });
   const limit = PREF.homeN || entries.length;
   const shown = homeMore ? entries : entries.slice(0, limit);
-  const card = e => `<button type="button" class="card ${e.cover ? '' : 'empty-cover'}" data-open="${esc(e.id)}">${e.cover ? `<img loading="lazy" decoding="async" src="${thumbUrl(e.cover)}" alt="">` : I_FOLDER}<span class="cap"><b>${esc(e.name)}</b><small>${e.n}장</small></span></button>`;
+  const favs = id => PHOTOS.filter(p => (p.folder || '') === id && p.fav).length;
+  const card = e => `<button type="button" class="card ${e.cover ? '' : 'empty-cover'}" data-open="${esc(e.id)}">${e.cover ? `<img loading="lazy" decoding="async" src="${thumbUrl(e.cover)}" alt="">` : I_FOLDER}<span class="cap"><b>${esc(e.name)}</b><small>${e.n}장${favs(e.id) ? ` · ♥ ${favs(e.id)}` : ''}</small></span></button>`;
   let html = '';
   if (!entries.length) html += `<div class="empty"><b>아직 폴더가 없어요</b>아래 '+ 새 폴더'로 만들고, 그 안에서 + 를 눌러 올려 보세요</div>`;
   html += `<div class="cards">${shown.map(card).join('')}<button type="button" class="card new" data-new="1">+ 새 폴더</button></div>`;
@@ -510,13 +523,23 @@ function renderHome() {
   if (PHOTOS.length) html += `<button type="button" class="more" data-open="all">전체 사진 보기 (${PHOTOS.length}장)</button>`;
   root.innerHTML = html;
 }
+// 올리는 중에 화면이 다시 그려져도 보던 자리가 튀지 않게: 보이던 첫 사진을 기준으로 위치를 되돌린다
+function renderKeep() {
+  const hh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hh')) || 100;
+  const first = [...document.querySelectorAll('.tile')].find(t => t.getBoundingClientRect().bottom > hh);
+  const id = first && first.dataset.id, off = first ? first.getBoundingClientRect().top : 0;
+  render();
+  if (id) { const el = document.querySelector(`.tile[data-id="${id}"]`); if (el) window.scrollBy(0, el.getBoundingClientRect().top - off); }
+}
+$('#topBtn').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+window.addEventListener('scroll', () => { $('#topBtn').classList.toggle('on', window.scrollY > 800 && !$('#main').hidden); }, { passive: true });
 function render() {
   paintHead();
   if (CUR === 'home') { renderHome(); return; }
   renderChips();
   const all = visible(); const root = $('#grid');
   if (!all.length) {
-    root.innerHTML = `<div class="empty"><b>${CUR === 'all' ? '아직 사진이 없어요' : esc(folderName(CUR)) + ' 폴더가 비어 있어요'}</b>오른쪽 아래 + 를 눌러 올려 보세요${CUR === 'all' ? '' : '(이 폴더에 들어가요)'}</div>`;
+    root.innerHTML = FAV_ONLY ? `<div class="empty"><b>좋아요한 사진이 아직 없어요</b>사진을 크게 열고 ♡ 를 눌러 보세요</div>` : `<div class="empty"><b>${CUR === 'all' ? '아직 사진이 없어요' : esc(folderName(CUR)) + ' 폴더가 비어 있어요'}</b>오른쪽 아래 + 를 눌러 올려 보세요${CUR === 'all' ? '' : '(이 폴더에 들어가요)'}</div>`;
     return;
   }
   const limit = PREF.pageN ? PREF.pageN * pages : all.length;
@@ -526,7 +549,7 @@ function render() {
   let html = '';
   for (const [k, arr] of groups) {
     html += `<div class="month">${esc(k)}<small>${arr.length}장</small></div><div class="grid">`;
-    for (const p of arr) html += `<button type="button" class="tile" data-id="${p.id}"><img loading="lazy" decoding="async" src="${thumbUrl(p.id)}" alt="">${p.memo ? '<span class="m"></span>' : ''}</button>`;
+    for (const p of arr) html += `<button type="button" class="tile" data-id="${p.id}"><img loading="lazy" decoding="async" src="${thumbUrl(p.id)}" alt="" onload="this.classList.add('ld')">${p.memo ? '<span class="m"></span>' : ''}${p.fav ? '<span class="f"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></span>' : ''}</button>`;
     html += '</div>';
   }
   if (all.length > list.length) html += `<button type="button" class="more" data-more="1">사진 ${all.length - list.length}장 더 보기</button>`;
@@ -570,6 +593,13 @@ $('#selDel').addEventListener('click', async () => {
   selOff(); paintHead(); render();
   toast(fail ? `${done}장 지움 · ${fail}장 실패` : `${done}장 지웠어요`, 2500);
 });
+$('#selFav').addEventListener('click', async () => {
+  if (!SEL || !SEL.size) return;
+  const ids = [...SEL]; const allFav = ids.every(id => (PHOTOS.find(x => x.id === id) || {}).fav); const nv = !allFav;
+  let done = 0;
+  for (const id of ids) { const p = PHOTOS.find(x => x.id === id); if (!p || !!p.fav === nv) { done++; continue; } try { const j = await api(`/api/album/photos/${id}`, { method: 'POST', json: { fav: nv } }); Object.assign(p, j.photo); done++; } catch (_) {} }
+  selOff(); renderKeep(); toast(nv ? `${done}장에 좋아요를 눌렀어요` : `${done}장의 좋아요를 뺐어요`, 2000);
+});
 $('#selMove').addEventListener('click', async () => {
   if (!SEL || !SEL.size) return;
   const items = [{ k: '', icon: I_FOLDER, label: '폴더 없음', sub: '기본 위치' }, ...FOLDERS.map(f => ({ k: f.id, icon: I_FOLDER, label: f.name })), { k: '__new', icon: I_FOLDER, label: '+ 새 폴더 만들어 옮기기' }];
@@ -588,7 +618,7 @@ $('#selMove').addEventListener('click', async () => {
   selOff(); render();
   toast(fail ? `${done}장 옮김 · ${fail}장 실패` : `${done}장을 '${folderName(dest)}'(으)로 옮겼어요`, 2500);
 });
-$('#chips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.new) return newFolder(); openFolder(b.dataset.f); });
+$('#chips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.new) return newFolder(); if (b.dataset.fav) { FAV_ONLY = !FAV_ONLY; pages = 1; render(); return; } FAV_ONLY = false; openFolder(b.dataset.f); });
 // ---------- 폴더(앨범): 접속한 사람 누구나 만들고 이름을 바꾸고(빈 폴더는) 지울 수 있다. PC의 사진 폴더에도 같은 이름의 폴더가 생긴다
 async function newFolder() {
   const v = await dialog({ title: '새 폴더', text: '폴더 이름(예: 2026 가을 여행). PC의 사진 폴더 안에도 같은 이름의 폴더가 생겨요.', placeholder: '폴더 이름', okText: '만들기' });
@@ -698,7 +728,7 @@ $('#menuBtn').addEventListener('click', async () => {
 });
 
 // ---------- 올리기
-let upQueue = [], upBusy = false, upStop = false, upXhr = null, upDone = 0, upFail = [];
+let upQueue = [], upBusy = false, upStop = false, upXhr = null, upDone = 0, upFail = [], lastDraw = 0;
 $('#fab').addEventListener('click', async () => {
   const it = await sheet('사진 올리기', [
     { k: 'pick', icon: I.pick, label: '앨범에서 고르기', sub: '여러 장 한꺼번에 가능' },
@@ -712,9 +742,14 @@ window.addEventListener('paste', e => { const fs = [...(e.clipboardData?.files |
 document.addEventListener('dragover', e => { if (ME) e.preventDefault(); });
 document.addEventListener('drop', e => { if (!ME) return; e.preventDefault(); addFiles([...(e.dataTransfer?.files || [])]); });
 function addFiles(files) {
-  const imgs = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(f.name));
+  let imgs = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(f.name));
   if (!imgs.length) { toast('사진 파일만 올릴 수 있어요'); return; }
   if (imgs.length < files.length) toast(`사진이 아닌 파일 ${files.length - imgs.length}개는 뺐어요`);
+  // 이어서 올릴 때 겹친 사진(같은 폴더에 같은 이름·크기)은 건너뛴다
+  const dest = (CUR === 'all' || CUR === 'home') ? '' : CUR;
+  const have = new Set(PHOTOS.filter(p => (p.folder || '') === dest).map(p => p.name + '|' + p.size));
+  const dup = imgs.filter(f => have.has(f.name + '|' + f.size)).length;
+  if (dup) { imgs = imgs.filter(f => !have.has(f.name + '|' + f.size)); toast(`이미 있는 사진 ${dup}장은 건너뛰어요`, 2500); if (!imgs.length) return; }
   if (!upQueue.length && !upBusy) { upDone = 0; upFail = []; upStop = false; if (CUR === 'home' || CUR === 'all') toast("'폴더 없음'에 올려요. 폴더 안에서 올리면 그 폴더에 들어가요", 2500); }
   upQueue.push(...imgs);
   pump();
@@ -736,7 +771,7 @@ async function pump() {
       if (meta.thumb) { try { await xhrUpload(`${SRV}/api/album/thumb/${j.photo.id}`, meta.thumb); j.photo.thumb = true; } catch (_) {} }
       PHOTOS.push(j.photo); PHOTOS.sort((a, b) => (b.taken - a.taken) || (b.ts - a.ts));
       USAGE = j; upDone++;
-      paintHead(); render();
+      if (Date.now() - lastDraw > 1500) { lastDraw = Date.now(); paintHead(); renderKeep(); }
     } catch (err) {
       if (upStop) break;
       upFail.push(`${f.name}: ${err.message}`);
@@ -745,6 +780,7 @@ async function pump() {
   }
   upBusy = false; upXhr = null;
   $('#upbar').hidden = true;
+  paintHead(); renderKeep();
   if (upDone || upFail.length) {
     if (upFail.length) dialog({ title: `올리기 끝 — ${upDone}장 성공, ${upFail.length}장 실패`, text: upFail.slice(0, 6).join('\n') + (upFail.length > 6 ? `\n… 외 ${upFail.length - 6}장` : ''), noInput: true, okText: '확인' });
     else toast(`${upDone}장 올렸어요`);
@@ -818,6 +854,8 @@ function showCur() {
   full.onload = () => { if (full.src === fileUrl(p.id)) full.classList.add('on'); };
   $('#vmeta').innerHTML = `<b>${esc(fmtDate(dateOf(p)))}</b><span>${p.folder ? esc(folderName(p.folder)) + ' · ' : ''}${esc(fmtMB(p.size))}${p.w ? ` · ${p.w}×${p.h}` : ''} · ${vIdx + 1}/${vList.length}</span>`;
   $('#vmemo').textContent = p.memo || '';
+  $('#vFav').classList.toggle('on', !!p.fav);
+  zoomReset();
   $('#vPrev').style.visibility = vIdx > 0 ? '' : 'hidden'; $('#vNext').style.visibility = vIdx < vList.length - 1 ? '' : 'hidden';
   for (const d of [1, -1]) { const n = vList[vIdx + d]; if (n) { const im = new Image(); im.src = fileUrl(n.id); } }
 }
@@ -825,12 +863,13 @@ function step(d) { const n = vIdx + d; if (n < 0 || n >= vList.length) return; v
 $('#vClose').addEventListener('click', () => closeViewer());
 $('#vPrev').addEventListener('click', () => step(-1));
 $('#vNext').addEventListener('click', () => step(1));
-$('#vstage').addEventListener('click', e => { if (e.target.tagName === 'IMG' || e.target === e.currentTarget) $('#viewer').classList.toggle('hide'); });
+let hideT = 0;
+$('#vstage').addEventListener('click', e => { if (!(e.target.tagName === 'IMG' || e.target === e.currentTarget)) return; clearTimeout(hideT); hideT = setTimeout(() => { if (lastTap) $('#viewer').classList.toggle('hide'); }, 320); });
 document.addEventListener('keydown', e => { if (!vOpen) return; if (e.key === 'ArrowLeft') step(-1); else if (e.key === 'ArrowRight') step(1); else if (e.key === 'Escape') closeViewer(); });
 { // 좌우로 밀어 넘기기(세로 스크롤·핀치는 그대로)
   let sx = 0, sy = 0, dx = 0, on = false, multi = false; const st = $('#vstage');
-  st.addEventListener('touchstart', e => { multi = e.touches.length > 1; if (multi) { on = false; return; } sx = e.touches[0].clientX; sy = e.touches[0].clientY; dx = 0; on = true; st.classList.remove('sw'); }, { passive: true });
-  st.addEventListener('touchmove', e => { if (!on || e.touches.length > 1) { on = false; st.style.transform = ''; return; } dx = e.touches[0].clientX - sx; const dy = e.touches[0].clientY - sy; if (Math.abs(dy) > Math.abs(dx) * 1.3) { on = false; st.style.transform = ''; return; } const edge = (dx > 0 && vIdx === 0) || (dx < 0 && vIdx === vList.length - 1); st.style.transform = `translateX(${edge ? dx / 3 : dx}px)`; }, { passive: true });
+  st.addEventListener('touchstart', e => { multi = e.touches.length > 1 || Z.s > 1; if (multi) { on = false; return; } sx = e.touches[0].clientX; sy = e.touches[0].clientY; dx = 0; on = true; st.classList.remove('sw'); }, { passive: true });
+  st.addEventListener('touchmove', e => { if (!on || e.touches.length > 1 || Z.s > 1) { on = false; st.style.transform = ''; return; } dx = e.touches[0].clientX - sx; const dy = e.touches[0].clientY - sy; if (Math.abs(dy) > Math.abs(dx) * 1.3) { on = false; st.style.transform = ''; return; } const edge = (dx > 0 && vIdx === 0) || (dx < 0 && vIdx === vList.length - 1); st.style.transform = `translateX(${edge ? dx / 3 : dx}px)`; }, { passive: true });
   st.addEventListener('touchend', () => { if (!on) return; on = false; st.classList.add('sw'); st.style.transform = ''; if (Math.abs(dx) > 60) step(dx < 0 ? 1 : -1); });
 }
 $('#vMemo').addEventListener('click', async () => {
@@ -845,6 +884,31 @@ async function fetchBlob(p) {
   if (!r.ok) throw new Error('사진을 받지 못했어요');
   const b = await r.blob();
   return new File([b], p.name || ('photo' + (p.mime === 'image/png' ? '.png' : p.mime === 'image/webp' ? '.webp' : p.mime === 'image/gif' ? '.gif' : '.jpg')), { type: p.mime || b.type });
+}
+$('#vFav').addEventListener('click', async () => {
+  const p = cur(); if (!p) return;
+  const nv = !p.fav; p.fav = nv; $('#vFav').classList.toggle('on', nv);
+  try { const j = await api(`/api/album/photos/${p.id}`, { method: 'POST', json: { fav: nv } }); Object.assign(p, j.photo); renderKeep(); if (navigator.vibrate) navigator.vibrate(10); }
+  catch (err) { p.fav = !nv; $('#vFav').classList.toggle('on', !nv); toast(err.message); }
+});
+// 핀치로 확대·끌어서 보기, 두 번 두드리면 2.5배 ↔ 원래대로. 확대 중에는 좌우 넘기기를 쉰다
+let Z = { s: 1, x: 0, y: 0 }, pinch = null, lastTap = 0;
+function zoomApply() { const f = $('#vfull'); f.style.transform = `translate(-50%,-50%) translate(${Z.x}px,${Z.y}px) scale(${Z.s})`; $('#vth').style.visibility = Z.s > 1 ? 'hidden' : ''; }
+function zoomReset() { Z = { s: 1, x: 0, y: 0 }; zoomApply(); }
+{
+  const st = $('#vstage');
+  const dist = e => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  st.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) { pinch = { d: dist(e), s: Z.s, x: Z.x, y: Z.y, cx: (e.touches[0].clientX + e.touches[1].clientX) / 2, cy: (e.touches[0].clientY + e.touches[1].clientY) / 2 }; return; }
+    if (e.touches.length === 1 && Z.s > 1) pinch = { pan: true, px: e.touches[0].clientX, py: e.touches[0].clientY, x: Z.x, y: Z.y };
+  }, { passive: true });
+  st.addEventListener('touchmove', e => {
+    if (!pinch) return;
+    if (e.touches.length === 2 && !pinch.pan) { const ns = Math.min(4, Math.max(1, pinch.s * dist(e) / pinch.d)); const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2, cy = (e.touches[0].clientY + e.touches[1].clientY) / 2; Z = { s: ns, x: pinch.x + (cx - pinch.cx), y: pinch.y + (cy - pinch.cy) }; zoomApply(); }
+    else if (pinch.pan && e.touches.length === 1) { Z.x = pinch.x + (e.touches[0].clientX - pinch.px); Z.y = pinch.y + (e.touches[0].clientY - pinch.py); zoomApply(); }
+  }, { passive: true });
+  st.addEventListener('touchend', e => { if (pinch && !e.touches.length) { if (Z.s < 1.05) zoomReset(); pinch = null; } }, { passive: true });
+  st.addEventListener('click', e => { const now = Date.now(); if (now - lastTap < 300) { if (Z.s > 1) zoomReset(); else { const r = st.getBoundingClientRect(); Z = { s: 2.5, x: (r.width / 2 - (e.clientX - r.left)) * 1.5, y: (r.height / 2 - (e.clientY - r.top)) * 1.5 }; zoomApply(); } lastTap = 0; } else lastTap = now; });
 }
 $('#vMove').addEventListener('click', async () => {
   const p = cur(); if (!p) return;

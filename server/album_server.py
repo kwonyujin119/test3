@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '1.9'
+VERSION = '2.0'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -132,7 +132,8 @@ try:   # 1.3: 사진이 속한 폴더(앨범). 빈 값이면 기본(폴더 없�
 except sqlite3.OperationalError:
     pass
 for _sql in ('ALTER TABLE sessions ADD COLUMN admin INTEGER DEFAULT 0',   # 1.9: 관리자 로그인 표시
-             'ALTER TABLE folders ADD COLUMN cover TEXT DEFAULT \'\''):   # 1.9: 폴더 대표사진
+             'ALTER TABLE folders ADD COLUMN cover TEXT DEFAULT \'\'',    # 1.9: 폴더 대표사진
+             'ALTER TABLE photos ADD COLUMN fav INTEGER DEFAULT 0'):        # 2.0: 좋아요(♡)
     try:
         DB.execute(_sql)
     except sqlite3.OperationalError:
@@ -214,7 +215,8 @@ def usage():
 
 def row_out(r):
     return {'id': r['id'], 'who': r['who'] or '', 'name': r['name'], 'mime': r['mime'], 'size': r['size'], 'w': r['w'], 'h': r['h'],
-            'memo': r['memo'] or '', 'taken': r['taken'], 'ts': r['ts'], 'thumb': bool(r['thumb']), 'folder': r['folder'] or ''}
+            'memo': r['memo'] or '', 'taken': r['taken'], 'ts': r['ts'], 'thumb': bool(r['thumb']), 'folder': r['folder'] or '',
+            'fav': bool(r['fav'] if 'fav' in r.keys() else 0)}
 
 
 # ---------------------------------------------------------------- HTTP
@@ -563,6 +565,8 @@ class H(BaseHTTPRequestHandler):
                             if os.path.exists(src + suf):
                                 os.replace(src + suf, dst + suf)
                         q('UPDATE photos SET folder=? WHERE id=?', (dest, r['id']), commit=True)
+                if 'fav' in b:   # 2.0: 좋아요 켜기/끄기(누구나)
+                    q('UPDATE photos SET fav=? WHERE id=?', (1 if b.get('fav') else 0, r['id']), commit=True)
                 if 'memo' in b:
                     memo = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', str(b.get('memo') or '')).strip()[:300]
                     q('UPDATE photos SET memo=? WHERE id=?', (memo, r['id']), commit=True)
