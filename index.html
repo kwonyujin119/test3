@@ -246,7 +246,7 @@ body.sel #topBtn{bottom:calc(84px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v18';
+const VER = 'v19';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -986,10 +986,10 @@ function paintInstall() {
   const b = $('#installBtn'); b.hidden = isStandalone();
   const bar = $('#installBar'); if (!bar) return;
   const dismissed = +(LS.get('album.instDismiss') || 0) > Date.now() - 7 * 86400e3;
-  const can = !!installEv || isIOS();
-  bar.hidden = isStandalone() || dismissed || !can || $('#main').hidden;
+  const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  bar.hidden = isStandalone() || dismissed || !(installEv || mobile) || $('#main').hidden;
   $('#installGo').textContent = installEv ? '설치' : '방법 보기';
-  $('#installTxt').textContent = installEv ? '한 번 누르면 홈 화면에 앱으로 설치돼요' : '사파리 공유 버튼 → 홈 화면에 추가';
+  $('#installTxt').textContent = installEv ? '한 번 누르면 홈 화면에 앱으로 설치돼요' : isIOS() ? '사파리 공유 버튼 → 홈 화면에 추가' : '브라우저 메뉴(⋮) → 앱 설치 / 홈 화면에 추가';
 }
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; paintInstall(); });
 $('#installGo').addEventListener('click', installApp);
@@ -1007,7 +1007,13 @@ async function installApp() {
     : /Android/i.test(navigator.userAgent)
       ? '안드로이드: 브라우저 메뉴(⋮ 또는 ≡) → "앱 설치" 또는 "홈 화면에 추가"\n\n설치 버튼이 바로 뜨지 않으면 페이지를 한 번 새로고침한 뒤 다시 눌러 보세요.'
       : 'PC(크롬·엣지): 주소창 오른쪽 끝의 설치 아이콘(⊕ 또는 모니터 모양)을 누르거나, 브라우저 메뉴 → "앱 설치"\n\n이미 설치돼 있으면 시작 메뉴·바탕화면에서 "유진·아름 사진"을 찾으세요.';
-  dialog({ title: '앱으로 설치', text, noInput: true, okText: '알겠어요' });
+  let diag = '';
+  try {
+    const swc = 'serviceWorker' in navigator ? (navigator.serviceWorker.controller ? '동작 중' : '없음') : '미지원';
+    let mf = '?'; try { const r = await fetch('manifest.webmanifest?v=2', { cache: 'no-store' }); mf = r.ok ? '정상' : 'HTTP ' + r.status; } catch (_) { mf = '못 읽음'; }
+    diag = `\n\n진단: 앨범 ${VER} · 주소 ${location.protocol}//${location.host} · 설치 신호 ${installEv ? '있음' : '없음'} · 서비스워커 ${swc} · 앱정보 ${mf} · ${isStandalone() ? '앱으로 열림' : '브라우저로 열림'}`;
+  } catch (_) {}
+  dialog({ title: '앱으로 설치', text: text + diag, noInput: true, okText: '알겠어요' });
 }
 $('#installBtn').addEventListener('click', installApp);
 
