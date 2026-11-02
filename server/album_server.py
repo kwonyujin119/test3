@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '2.1'
+VERSION = '2.2'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -169,6 +169,58 @@ def photo_dir(folder_id):
 
 def photo_path(r):
     return os.path.join(photo_dir(r['folder'] if 'folder' in r.keys() else ''), r['id'])
+
+
+def disk_photo_count():
+    n = 0
+    for root, dirs, files in os.walk(PHOTOS):
+        n += sum(1 for f in files if re.fullmatch(r'[a-f0-9]{24}', f))
+        if root != PHOTOS:
+            dirs[:] = []   # 하위 폴더 한 단계만
+    return n
+
+
+def import_orphans():
+    """2.2: 사진 폴더(와 하위 폴더 한 단계)에 있는데 목록(DB)에 없는 사진을 목록에 넣는다. 돌려주는 값: 넣은 장수.
+    폴더 이름은 하위 폴더 이름 그대로, 찍은 시각은 파일 시각, 메모·좋아요는 복구되지 않는다."""
+    known = {r['id'] for r in q('SELECT id FROM photos')}
+    added = 0
+    for root, dirs, files in os.walk(PHOTOS):
+        rel = os.path.relpath(root, PHOTOS)
+        if root != PHOTOS:
+            dirs[:] = []
+        folder_id = ''
+        if rel != '.':
+            name = folder_name_ok(rel)
+            if not name:
+                continue
+            f = q('SELECT id FROM folders WHERE name=?', (name,), one=True)
+            if f:
+                folder_id = f['id']
+            else:
+                folder_id = secrets.token_hex(8)
+                q('INSERT INTO folders(id,name,ts) VALUES(?,?,?)', (folder_id, name, time.time()), commit=True)
+        for fn in files:
+            if not re.fullmatch(r'[a-f0-9]{24}', fn) or fn in known:
+                continue
+            fp = os.path.join(root, fn)
+            try:
+                with open(fp, 'rb') as fh:
+                    kind = sniff(fh.read(16))
+                if not kind:
+                    continue
+                st = os.stat(fp)
+            except OSError:
+                continue
+            thumb = 1 if os.path.exists(fp + '.t.jpg') else 0
+            q('INSERT OR IGNORE INTO photos(id,who,name,mime,size,w,h,memo,taken,ts,thumb,folder) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+              (fn, '', '사진' + kind[1], kind[0], st.st_size, 0, 0, '', st.st_mtime, st.st_mtime, thumb, folder_id), commit=True)
+            known.add(fn)
+            added += 1
+    if added:
+        print(f'[앨범] 사진 폴더에서 목록에 없던 사진 {added}장을 되살렸습니다', flush=True)
+        upd_log(f'사진 폴더 다시 읽기: {added}장 복구')
+    return added
 
 
 def q(sql, args=(), one=False, commit=False):
@@ -419,7 +471,7 @@ class H(BaseHTTPRequestHandler):
                         pass
                 body = (f'사진 저장소 서버 {VERSION}\n\n화면 폴더: {wd or "(없음)"}  화면 버전: {ver}\n화면 갱신: {WEB_STATE["msg"]}\n'
                         f'공개 주소: {TUNNEL_URL[0] or "(없음) " + TUNNEL_STATE["msg"]}\n주소 등록(server-url.json): {PUBLISH_STATE["msg"] or "-"}\n'
-                        f'GitHub 토큰: {"있음" if CONF.get("github_token") else "없음"}\n사진 폴더: {PHOTOS}\n\n최근 기록:\n{log}\n\n'
+                        f'GitHub 토큰: {"있음" if CONF.get("github_token") else "없음"}\n사진 폴더: {PHOTOS}\n목록의 사진: {usage()["count"]}장 · 폴더 안 파일: {disk_photo_count()}장\n\n최근 기록:\n{log}\n\n'
                         f'문제가 있으면 /update 를 여세요.')
                 return self.send(200, body, 'text/plain; charset=utf-8')
             if path == '/update':   # 1.6: 업데이트 도우미(내장 화면) — web 폴더가 없어도 열린다
@@ -585,6 +637,12 @@ class H(BaseHTTPRequestHandler):
                 except Exception as e:
                     web = '화면 갱신 실패: ' + str(e)[:80]
                 return self.send(200, {'ok': True, 'result': f'{msg} · 화면: {web}', 'version': VERSION})
+            if path == '/api/album/rescan':   # 2.2: 사진 폴더 다시 읽어 목록에 없는 사진 되살리기
+                try:
+                    n = import_orphans()
+                except Exception as e:
+                    return self.err(500, '다시 읽기 실패: ' + str(e)[:100])
+                return self.send(200, dict(ok=True, added=n, **usage(), disk=disk_photo_count()))
             if path == '/api/album/web-upload':   # 1.6: 폰 브라우저가 GitHub에서 받은 화면 파일(정해진 8개만)을 web 폴더에 넣는다 {files:{rel: base64}}
                 import base64
                 b = self.body_json(limit=6_000_000)
@@ -808,6 +866,7 @@ button.sub{background:#fff;color:#0B1B3F;border:2px solid #E2E5EA}pre{white-spac
 <p>공개 주소가 "없음"이면: PC 브라우저로 <a href="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe">cloudflared 내려받기</a> → 파일 이름을 <b>cloudflared.exe</b>로 바꿔 <b>server</b> 폴더에 넣기 → 30초 안에 자동 시작</p>
 <input id="tok" type="password" placeholder="GitHub 토큰 (github_pat_…) — 어디서든 접속용, 한 번만">
 <button id="b4" class="sub">3. 토큰 등록 → kwonyujin119.github.io/test3 로 어디서든 접속</button>
+<button id="b5" class="sub">사진 폴더 다시 읽기 (목록에 없는 사진 되살리기)</button>
 <button id="b3" class="sub">서버 상태 보기</button>
 <pre id="out">버튼을 누르면 결과가 여기에 나와요.</pre>
 <p><a href="/">← 앨범으로</a></p>
@@ -828,6 +887,7 @@ async function publishViaBrowser(token,repo,url){const api='https://api.github.c
 document.getElementById('b4').onclick=async()=>{try{await login();const token=document.getElementById('tok').value.trim();if(!token){out('토큰을 붙여 넣어 주세요');return;}out('등록하는 중…');const r=await fetch('/api/album/github-token',{method:'POST',headers:H(),body:JSON.stringify({token})});const j=await r.json();if(!j.ok)throw new Error(j.error);document.getElementById('tok').value='';
  let msg=j.published||'';if(j.public_url&&!/^등록됨/.test(msg)){out('서버가 직접 못 적어 이 브라우저가 대신 적는 중…');try{msg=await publishViaBrowser(token,'kwonyujin119/test3',j.public_url);await fetch('/api/album/published',{method:'POST',headers:H(),body:JSON.stringify({ok:true,url:j.public_url})});}catch(e){msg='브라우저 등록 실패: '+e.message;await fetch('/api/album/published',{method:'POST',headers:H(),body:JSON.stringify({ok:false,msg:e.message})});}}
  out(msg+(j.public_url?'\n공개 주소: '+j.public_url:'\n공개 주소가 아직 없어요(cloudflared). 위 안내대로 넣고 1분 뒤 다시 누르세요')+'\n\n"등록됨"이면 1~2분 뒤 https://kwonyujin119.github.io/test3/ 가 어디서든 열려요.');}catch(e){if(e)out('실패: '+(e.message||e));}};
+document.getElementById('b5').onclick=async()=>{try{await login();out('사진 폴더를 읽는 중…');const r=await fetch('/api/album/rescan',{method:'POST',headers:H(),body:'{}'});const j=await r.json();if(!j.ok)throw new Error(j.error);out('되살린 사진: '+j.added+'장\n지금 목록: '+j.count+'장 · 폴더 안 파일: '+j.disk+'장'+(j.disk>j.count?'\n(폴더에는 있는데 목록에 못 넣은 파일이 있어요 — 사진 형식이 아니거나 읽을 수 없는 파일)':''));}catch(e){if(e)out('실패: '+(e.message||e));}};
 document.getElementById('b3').onclick=async()=>{out(await (await fetch('/status',{cache:'no-store'})).text());};
 </script></body></html>'''
 
@@ -1279,6 +1339,12 @@ def main():
     print(f'  바깥 접속:        ' + ('cloudflared 없음 — start.bat이 받지 못했으면 server 폴더에 cloudflared.exe를 넣어 주세요' if not find_cloudflared() else ('공개 주소 만드는 중… (아래에 뜸)' + ('' if CONF.get('github_token') else ' · GitHub 토큰 없음 → github-token-setup.bat 실행하면 화면이 주소를 자동으로 찾음'))))
     print(line, flush=True)
     threading.Thread(target=auto_update_loop, args=(srv,), daemon=True).start()
+    def _rescan():
+        try:
+            import_orphans()
+        except Exception as e:
+            print('[앨범] 사진 폴더 다시 읽기 실패:', str(e)[:120], flush=True)
+    threading.Thread(target=_rescan, daemon=True).start()   # 2.2: 목록(DB)이 비었거나 폴더를 옮겼어도 파일이 있으면 되살린다
     if CONF.get('auto_update'):
         threading.Thread(target=web_update_loop, daemon=True).start()
     if str(CONF.get('tunnel') or 'auto') != 'off':
