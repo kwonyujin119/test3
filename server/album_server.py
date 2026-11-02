@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '2.0'
+VERSION = '2.1'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -846,15 +846,75 @@ def ver_tuple(v):
 
 
 ALT_BASE = 'https://kwonyujin119.github.io/test3'   # 1.8: raw.githubusercontent.com이 막힌 망에서는 Pages에서 받는다(같은 파일)
+PS_OK = [None]   # 2.1: 이 PC에서 파이썬 HTTPS가 인증서 오류로 막히면 PowerShell(윈도우 인증서 저장소 사용)로 대신 받는다
+
+
+def _is_ssl_err(e):
+    t = (str(e) + ' ' + type(e).__name__).lower()
+    return 'certificate' in t or 'ssl' in t
+
+
+def ps_http(url, method='GET', headers=None, body=None, out_file=None, timeout=60):
+    """PowerShell로 HTTP 요청. 돌려주는 값: 본문(bytes) 또는 out_file에 저장 뒤 b''. 윈도우가 아니면 예외."""
+    import subprocess, tempfile
+    if os.name != 'nt':
+        raise RuntimeError('PowerShell 없음')
+    hdr = ''.join(f"$h['{k}'] = '{str(v).replace(chr(39), chr(39) + chr(39))}'\n" for k, v in (headers or {}).items())
+    tmp_body = None
+    lines = ["[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12", "$ProgressPreference = 'SilentlyContinue'", "$h = @{}", hdr]
+    if body is not None:
+        tmp_body = tempfile.NamedTemporaryFile('wb', suffix='.json', delete=False, dir=DATA)
+        tmp_body.write(body if isinstance(body, bytes) else body.encode('utf-8'))
+        tmp_body.close()
+        lines.append(f"$b = [IO.File]::ReadAllText('{tmp_body.name}', [Text.Encoding]::UTF8)")
+    if out_file:
+        lines.append(f"Invoke-WebRequest -Uri '{url}' -Method {method} -Headers $h -OutFile '{out_file}.part' -UseBasicParsing -TimeoutSec {int(timeout)}")
+    else:
+        bpart = ' -Body $b -ContentType "application/json"' if body is not None else ''
+        lines.append(f"$r = Invoke-WebRequest -Uri '{url}' -Method {method} -Headers $h{bpart} -UseBasicParsing -TimeoutSec {int(timeout)}")
+        lines.append("$ms = New-Object IO.MemoryStream; $r.RawContentStream.CopyTo($ms); [Console]::OpenStandardOutput().Write($ms.ToArray(), 0, $ms.Length)")
+    ps = tempfile.NamedTemporaryFile('w', suffix='.ps1', delete=False, dir=DATA, encoding='utf-8-sig')
+    ps.write('\n'.join(lines) + '\n')
+    ps.close()
+    try:
+        cp = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps.name], capture_output=True, timeout=timeout + 30)
+        if cp.returncode != 0:
+            raise RuntimeError('PowerShell 실패: ' + cp.stderr.decode('utf-8', 'replace').strip()[:160])
+        if out_file:
+            os.replace(out_file + '.part', out_file)
+            return b''
+        return cp.stdout
+    finally:
+        for f in (ps.name, tmp_body.name if tmp_body else None):
+            try:
+                if f:
+                    os.remove(f)
+            except OSError:
+                pass
+
+
+def http_get(url, limit, timeout=30, headers=None):
+    """urllib로 받고, 인증서 오류면 PowerShell로 다시 시도한다(윈도우). 돌려주는 값: bytes."""
+    import urllib.request
+    hdr = dict({'User-Agent': 'album-server'}, **(headers or {}))
+    if PS_OK[0] is not True:
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=hdr), timeout=timeout) as r:
+                return r.read(limit)
+        except Exception as e:
+            if not _is_ssl_err(e) or os.name != 'nt':
+                raise
+            print('[망] 파이썬 인증서 오류 → PowerShell로 대신 받습니다', flush=True)
+    data = ps_http(url, 'GET', hdr, timeout=timeout)
+    PS_OK[0] = True
+    return data[:limit]
 
 
 def fetch_text(url, limit, timeout=30):
-    import urllib.request
     last = None
     for u in (url, url.replace('https://raw.githubusercontent.com/kwonyujin119/test3/main', ALT_BASE)):
         try:
-            with urllib.request.urlopen(urllib.request.Request(u, headers={'User-Agent': 'album-server'}), timeout=timeout) as r:
-                return r.read(limit).decode('utf-8')
+            return http_get(u, limit, timeout).decode('utf-8')
         except Exception as e:
             last = e
             if u == url and ALT_BASE not in url:
@@ -979,18 +1039,18 @@ def publish_url(url):
     hdr = {'Authorization': 'Bearer ' + tok, 'Accept': 'application/vnd.github+json', 'User-Agent': 'album-server', 'X-GitHub-Api-Version': '2022-11-28'}
     sha = None
     try:
-        with urllib.request.urlopen(urllib.request.Request(api, headers=hdr), timeout=20) as r:
-            cur = json.loads(r.read().decode('utf-8'))
-            sha = cur.get('sha')
-            try:
-                old = json.loads(base64.b64decode(cur.get('content') or '').decode('utf-8'))
-                if old.get('url') == url:
-                    PUBLISH_STATE['msg'] = '등록됨'
-                    PUBLISH_STATE['url'] = url
-                    print('[주소] server-url.json이 이미 같은 주소입니다.', flush=True)
-                    return
-            except Exception:
-                pass
+        raw = http_get(api, 1_000_000, 20, headers=hdr)
+        cur = json.loads(raw.decode('utf-8'))
+        sha = cur.get('sha')
+        try:
+            old = json.loads(base64.b64decode(cur.get('content') or '').decode('utf-8'))
+            if old.get('url') == url:
+                PUBLISH_STATE['msg'] = '등록됨'
+                PUBLISH_STATE['url'] = url
+                print('[주소] server-url.json이 이미 같은 주소입니다.', flush=True)
+                return
+        except Exception:
+            pass
     except Exception as e:
         if '404' not in str(e):
             print('[주소] server-url.json 확인 실패:', str(e)[:120], flush=True)
@@ -999,9 +1059,19 @@ def publish_url(url):
     if sha:
         body['sha'] = sha
     try:
-        req = urllib.request.Request(api, data=json.dumps(body).encode('utf-8'), headers=dict(hdr, **{'Content-Type': 'application/json'}), method='PUT')
-        with urllib.request.urlopen(req, timeout=30) as r:
-            r.read()
+        payload = json.dumps(body).encode('utf-8')
+        if PS_OK[0] is True:
+            ps_http(api, 'PUT', hdr, body=payload, timeout=40)
+        else:
+            try:
+                req = urllib.request.Request(api, data=payload, headers=dict(hdr, **{'Content-Type': 'application/json'}), method='PUT')
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    r.read()
+            except Exception as e1:
+                if not _is_ssl_err(e1) or os.name != 'nt':
+                    raise
+                ps_http(api, 'PUT', hdr, body=payload, timeout=40)
+                PS_OK[0] = True
         PUBLISH_STATE['msg'] = '등록됨'
         PUBLISH_STATE['url'] = url
         print('[주소] server-url.json 갱신 완료 — 1~2분 뒤 https://kwonyujin119.github.io/test3/ 가 이 서버로 붙습니다.', flush=True)
@@ -1021,8 +1091,14 @@ def ensure_cloudflared():
     try:
         TUNNEL_STATE['msg'] = 'cloudflared 내려받는 중'
         print('[터널] cloudflared.exe를 내려받습니다(한 번만, 약 1분)…', flush=True)
-        with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'album-server'}), timeout=120) as r, open(dst + '.part', 'wb') as f:
-            shutil.copyfileobj(r, f)
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'album-server'}), timeout=120) as r, open(dst + '.part', 'wb') as f:
+                shutil.copyfileobj(r, f)
+        except Exception as e1:
+            if not _is_ssl_err(e1):
+                raise
+            print('[터널] 파이썬 인증서 오류 → PowerShell로 대신 받습니다', flush=True)
+            ps_http(url, 'GET', {}, out_file=dst + '.part', timeout=300)
         if os.path.getsize(dst + '.part') < 10_000_000:
             raise ValueError('받은 파일이 너무 작음')
         os.replace(dst + '.part', dst)
@@ -1056,8 +1132,7 @@ def update_web():
             data = None
             for b2 in (base, ALT_BASE):
                 try:
-                    with urllib.request.urlopen(urllib.request.Request(f'{b2}/{rel}?t={int(time.time())}', headers={'User-Agent': 'album-server'}), timeout=30) as r:
-                        data = r.read(20_000_000)
+                    data = http_get(f'{b2}/{rel}?t={int(time.time())}', 20_000_000, 30)
                     break
                 except Exception as e2:
                     if b2 == ALT_BASE:

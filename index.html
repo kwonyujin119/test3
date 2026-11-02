@@ -246,7 +246,7 @@ body.sel #topBtn{bottom:calc(84px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v19';
+const VER = 'v20';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -406,7 +406,13 @@ async function pingInfo() {
     el.innerHTML = `서버 ${esc(j.version)} · <button type="button" id="chgSrv">서버 주소</button>`;
   } catch (err) {
     let why = err.message;
-    if (PAGES_HOST && !(await publishedSrv())) {   // github.io에서 열었는데 서버가 공개 주소를 아직 등록하지 않음 → 원인을 그대로 말한다
+    const pubNow = PAGES_HOST ? await publishedSrv() : '';
+    if (PAGES_HOST && pubNow && /연결할 수 없어요/.test(why)) {   // 등록된 주소는 있는데 응답이 없다 → PC가 꺼졌거나 다시 켜져 주소가 바뀐 것
+      el.innerHTML = `<span class="msg warn" style="display:block;min-height:0;margin:0 0 6px">등록된 서버 주소가 응답하지 않아요. PC가 꺼져 있거나, PC를 다시 켜서 주소가 바뀐 뒤 아직 등록되지 않은 상태예요. PC가 켜져 있다면 집 와이파이에서 <b>http://PC주소:4848</b>로 한 번 들어가면 새 주소가 자동 등록돼요.</span><button type="button" id="chgSrv">서버 주소 직접 넣기</button>`;
+      const b3 = $('#chgSrv'); if (b3) b3.addEventListener('click', changeSrv);
+      return;
+    }
+    if (PAGES_HOST && !pubNow) {   // github.io에서 열었는데 서버가 공개 주소를 아직 등록하지 않음 → 원인을 그대로 말한다
       el.innerHTML = `<span class="msg warn" style="display:block;min-height:0;margin:0 0 6px">PC 서버가 공개 주소를 아직 등록하지 않았어요. 집 와이파이에서 <b>http://PC주소:4848</b>로 들어가 ⋯ 메뉴 → '어디서든 접속' → 'GitHub 토큰 등록'을 해 주세요. 그 메뉴가 없으면 PC 서버가 옛 버전이라 PC에서 start.bat을 다시 켜야 해요.</span><button type="button" id="chgSrv">서버 주소 직접 넣기</button>`;
       const b2 = $('#chgSrv'); if (b2) b2.addEventListener('click', changeSrv);
       return;
