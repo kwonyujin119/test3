@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '2.2'
+VERSION = '2.3'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -61,7 +61,7 @@ def load_conf():
     }
     conf = {}
     try:
-        with open(CONF_PATH, encoding='utf-8') as f:
+        with open(CONF_PATH, encoding='utf-8-sig') as f:
             conf = json.load(f)
         if not isinstance(conf, dict):
             conf = {}
@@ -105,7 +105,7 @@ WEB_TYPES = {'.html': 'text/html; charset=utf-8', '.webmanifest': 'application/m
 def conf_disk(key):
     """서버가 켜진 채로 set-code.bat이 고친 값을 바로 쓰도록 config.json에서 그 항목만 다시 읽는다."""
     try:
-        with open(CONF_PATH, encoding='utf-8') as f:
+        with open(CONF_PATH, encoding='utf-8-sig') as f:
             d = json.load(f)
         if key in d:
             with CONF_LOCK:
