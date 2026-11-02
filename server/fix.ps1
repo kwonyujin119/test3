@@ -27,7 +27,7 @@ Write-Host '[2/4] 표준 폴더에 최신 파일을 넣습니다...'
 New-Item -ItemType Directory -Force -Path $Target, (Join-Path $Target 'data'), (Join-Path $Target '사진') | Out-Null
 foreach ($f in @('index.html', 'manifest.webmanifest', 'sw.js')) { if (Test-Path (Join-Path $ZipRoot $f)) { Copy-Item (Join-Path $ZipRoot $f) $Root -Force } }
 foreach ($d in @('icons', 'img')) { if (Test-Path (Join-Path $ZipRoot $d)) { New-Item -ItemType Directory -Force -Path (Join-Path $Root $d) | Out-Null; Copy-Item (Join-Path $ZipRoot ($d + '\*')) (Join-Path $Root $d) -Recurse -Force } }
-foreach ($f in @('album_server.py', 'start.bat', 'set-code.bat', 'github-token-setup.bat', 'fix.bat', 'fix.ps1', 'README.md')) { if (Test-Path (Join-Path $Here $f)) { Copy-Item (Join-Path $Here $f) $Target -Force } }
+foreach ($f in @('album_server.py', 'start.bat', 'set-code.bat', 'github-token-setup.bat', 'autostart-setup.bat', 'fix.bat', 'fix.ps1', 'README.md')) { if (Test-Path (Join-Path $Here $f)) { Copy-Item (Join-Path $Here $f) $Target -Force } }
 
 # 3) 다른 앨범 서버 폴더 찾기 (D:\ 와 사용자 폴더, 깊이 제한)
 Write-Host '[3/4] PC 안의 다른 앨범 서버 폴더를 찾아 사진과 목록을 모읍니다...'

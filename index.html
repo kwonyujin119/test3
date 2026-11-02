@@ -246,7 +246,7 @@ body.sel #topBtn{bottom:calc(84px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v20';
+const VER = 'v21';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -696,6 +696,7 @@ $('#menuBtn').addEventListener('click', async () => {
     { k: 'view', icon: I.pick, label: '보기 설정', sub: `첫 화면 폴더 ${PREF.homeN || '전체'}개 · 폴더 안 사진 ${PREF.pageN || '전체'}장씩` },
     { k: 'usage', icon: I.disk, label: '저장 공간', sub: USAGE ? `${fmtMB(USAGE.bytes)} / ${fmtMB(USAGE.max_bytes)} 사용 · 사진 ${USAGE.count}장` : '' },
     { k: 'upd', icon: I.srv, label: '서버 업데이트 지금 확인', sub: `지금 서버 ${ME ? ME.version : ''} · 새 버전이면 받아서 다시 켜요` },
+    ...(ME && 'autostart' in ME ? [{ k: 'auto', icon: I.srv, label: ME.autostart ? 'PC 켜면 자동 시작: 켜짐' : 'PC 켜면 자동 시작: 꺼짐', sub: ME.autostart ? '누르면 끔' : '누르면 켬 — 윈도우 로그인 뒤 20초 후 서버가 스스로 켜져요' }] : []),
     { k: 'pub', icon: I.srv, label: '어디서든 접속 (공개 주소)', sub: ME && ME.public_url ? (ME.has_token ? `github.io 자동 연결: ${ME.published || '확인 중'}` : '공개 주소 있음 · github.io 자동 연결하려면 토큰 등록') : `공개 주소: ${ME && ME.tunnel ? ME.tunnel : '없음'}` },
     ...(ME && ME.admin ? [{ k: 'code', icon: I.key, label: ME.has_code ? '접속코드 바꾸기' : '접속코드 정하기', sub: ME.has_code ? '둘이 쓰는 접속코드 · 바꾸면 다른 폰은 다시 로그인' : '아직 없어요 — 정하면 관리자 코드 없이 들어올 수 있어요' }] : []),
     ...(isStandalone() ? [] : [{ k: 'home', icon: I.home, label: '앱으로 설치', sub: 'PC·모바일 홈 화면에 아이콘으로' }]),
@@ -724,6 +725,7 @@ $('#menuBtn').addEventListener('click', async () => {
   if (it.k === 'delf') deleteFolder(CUR);
   if (it.k === 'usage') toast(it.sub, 3000);
   if (it.k === 'pub') publicDialog();
+  if (it.k === 'auto') { try { const j = await api('/api/album/autostart', { method: 'POST', json: { on: !ME.autostart } }); ME.autostart = j.on; toast(j.on ? '자동 시작을 켰어요' : '자동 시작을 껐어요', 2500); } catch (err) { toast(err.message, 4000); } }
   if (it.k === 'upd') { toast('확인하는 중…', 2000); try { const j = await api('/api/album/update-now', { method: 'POST', json: {}, timeout: 60000 }); toast(j.result, 5000); } catch (err) { toast(err.message, 4000); } }
   if (it.k === 'srv') changeSrv();
   if (it.k === 'home') installApp();
