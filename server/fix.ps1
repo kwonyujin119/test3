@@ -31,15 +31,19 @@ foreach ($f in @('album_server.py', 'start.bat', 'set-code.bat', 'github-token-s
 
 # 3) 다른 앨범 서버 폴더 찾기 (D:\ 와 사용자 폴더, 깊이 제한)
 Write-Host '[3/4] PC 안의 다른 앨범 서버 폴더를 찾아 사진과 목록을 모읍니다...'
+# 찾는 곳: D:\(깊이 5), 바탕화면·다운로드·문서(깊이 4). AppData 같은 큰 폴더는 건너뛴다(오래 걸림)
 $roots = @()
-if (Test-Path 'D:\') { $roots += 'D:\' }
-$roots += [Environment]::GetFolderPath('UserProfile')
+if (Test-Path 'D:\') { $roots += @{ p = 'D:\'; d = 5 } }
+foreach ($sp in @('Desktop', 'MyDocuments')) { $roots += @{ p = [Environment]::GetFolderPath($sp); d = 4 } }
+$roots += @{ p = (Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Downloads'); d = 4 }
 $found = @()
 foreach ($r in $roots) {
+  if (-not (Test-Path $r.p)) { continue }
+  Write-Host "   살펴보는 중: $($r.p)"
   try {
-    Get-ChildItem -Path $r -Filter 'album_server.py' -Recurse -Depth 6 -File -ErrorAction SilentlyContinue | ForEach-Object {
+    Get-ChildItem -Path $r.p -Filter 'album_server.py' -Recurse -Depth $r.d -File -ErrorAction SilentlyContinue | ForEach-Object {
       $dir = $_.DirectoryName
-      if ($dir -ne $Target -and $dir -ne $Here) { $found += $dir }
+      if ($dir -ne $Target -and $dir -ne $Here) { $script:found += $dir }
     }
   } catch {}
 }
@@ -58,7 +62,7 @@ foreach ($dir in $found) {
   $photos = Get-PhotosDir $dir
   $n = 0
   if (Test-Path $photos) {
-    $n = (Get-ChildItem -Path $photos -File -Recurse -Depth 1 -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^[a-f0-9]{24}(\.t\.jpg)?$' }).Count
+    $n = @(Get-ChildItem -Path $photos -File -Recurse -Depth 1 -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^[a-f0-9]{24}$' }).Count
   }
   Write-Host "   찾음: $dir  (사진 파일 $n개)"
   if ($n -gt 0 -and $photos -ne $targetPhotos) {
