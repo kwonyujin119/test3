@@ -4,3 +4,4 @@
 - 서버가 화면을 직접 내보낸다(`web_dir()`: `server/web/` → 저장소 루트). 폰은 같은 와이파이에서 `http://<PC주소>:4848`로 연다. 바깥 접속은 선택(cloudflared.exe 임시 주소).
 - 서버를 고치면 `VERSION`을 올린다(PC의 start.bat이 10분 안에 자동 업데이트). 화면을 고치면 index.html 안 `VER`을 올린다.
 - 사진은 `server/사진/`(config `photos_dir`)에만, 목록은 `server/data/album.db`. 서버 API는 `/api/album/*`.
+- manifest.webmanifest 에 `"id"` 를 넣지 않는다. `"id": "./"` 는 폴더가 아니라 주소 맨 위(kwonyujin119.github.io/)로 풀려서, 같은 주소를 쓰는 다른 앱(test0 업무 공간)과 같은 앱으로 섞인다(이름·아이콘이 뒤바뀜). 비워 두면 start_url(/test3/)이 고유 id 가 된다.
