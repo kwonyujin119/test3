@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '2.4'
+VERSION = '2.5'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -470,7 +470,7 @@ class H(BaseHTTPRequestHandler):
                     except OSError:
                         pass
                 body = (f'사진 저장소 서버 {VERSION}\n\n화면 폴더: {wd or "(없음)"}  화면 버전: {ver}\n화면 갱신: {WEB_STATE["msg"]}\n'
-                        f'공개 주소: {TUNNEL_URL[0] or "(없음) " + TUNNEL_STATE["msg"]}\n주소 등록(server-url.json): {PUBLISH_STATE["msg"] or "-"}\n'
+                        f'공개 주소: {TUNNEL_URL[0] or "(없음) " + TUNNEL_STATE["msg"]}\n주소 등록(server-url.json): {PUBLISH_STATE["msg"] or "-"}{" ← 지금 주소와 다름, 2분 안에 재시도" if TUNNEL_URL[0] and PUBLISH_STATE.get("url") != TUNNEL_URL[0] else ""}\n'
                         f'GitHub 토큰: {"있음" if CONF.get("github_token") else "없음"}\n사진 폴더: {PHOTOS}\n목록의 사진: {usage()["count"]}장 · 폴더 안 파일: {disk_photo_count()}장\nPC 켜면 자동 시작: {"켜짐" if autostart_get() else "꺼짐"}\n\n최근 기록:\n{log}\n\n'
                         f'문제가 있으면 /update 를 여세요.')
                 return self.send(200, body, 'text/plain; charset=utf-8')
@@ -1040,6 +1040,11 @@ def check_update(apply=True):
 def restart_self():
     """답을 보낸 뒤 프로세스를 통째로 끝낸다(os._exit). srv.shutdown()을 먼저 부르면 주 스레드가 먼저 끝나 종료 코드가 0이 되는 문제(1.0~1.4)가 있었다."""
     time.sleep(2)
+    try:
+        if TUNNEL_PROC[0]:
+            TUNNEL_PROC[0].kill()   # 2.5: 옛 공개 주소를 쥔 터널을 끝낸다(새 서버가 새 주소를 만들고 등록)
+    except Exception:
+        pass
     if os.environ.get('ALBUM_LOOP') == '1':
         os._exit(75)   # start.bat이 바로 다시 켠다
     # start.bat 없이 켠 경우: 새 창에서 스스로 다시 켜고 이 창은 닫는다
@@ -1081,6 +1086,20 @@ def auto_update_loop(srv):
 
 
 TUNNEL_URL = ['']
+TUNNEL_PROC = [None]
+
+
+def publish_loop():
+    """2.5: 공개 주소가 저장소에 적힌 것과 다르면 2분마다 다시 등록을 시도한다(PC를 켠 직후 망이 늦게 붙거나 GitHub가 잠시 안 될 때 대비)."""
+    while True:
+        time.sleep(120)
+        try:
+            u = TUNNEL_URL[0]
+            if u and PUBLISH_STATE.get('url') != u and CONF.get('github_token'):
+                print('[주소] 등록이 안 돼 있어 다시 시도합니다', flush=True)
+                publish_url(u)
+        except Exception as e:
+            print('[주소] 재시도 실패:', str(e)[:100], flush=True)
 
 
 def find_cloudflared():
@@ -1253,6 +1272,7 @@ def tunnel_loop(port):
     while True:
         try:
             p = subprocess.Popen([exe, 'tunnel', '--no-autoupdate', '--url', f'http://127.0.0.1:{port}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
+            TUNNEL_PROC[0] = p
             for line in p.stdout:
                 m = re.search(r'https://(?!api\.)[a-z0-9\-]+\.trycloudflare\.com', line)
                 if m and 'failed' not in line.lower() and not TUNNEL_URL[0]:
@@ -1392,6 +1412,7 @@ def main():
         threading.Thread(target=web_update_loop, daemon=True).start()
     if str(CONF.get('tunnel') or 'auto') != 'off':
         threading.Thread(target=tunnel_loop, args=(port,), daemon=True).start()
+        threading.Thread(target=publish_loop, daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

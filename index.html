@@ -100,6 +100,10 @@ body.sel .tile.on img{opacity:.55}
 body.sel #fab{display:none}
 .empty{margin:60px 20px;text-align:center;color:var(--muted)}
 .empty b{display:block;margin-bottom:6px;color:var(--ink);font-size:17px}
+#offBar{display:flex;align-items:center;gap:10px;margin:8px 8px 0;padding:10px 12px;border-radius:14px;background:#FEF3C7;color:#92400E;font-size:13px}
+#offBar b{display:block;font-size:14px}
+#offBar .t{flex:1}
+#offBar button{flex:none;padding:8px 12px;border-radius:10px;background:#92400E;color:#fff;font-weight:700}
 #installBar{display:flex;align-items:center;gap:10px;margin:8px 8px 0;padding:10px 10px 10px 12px;border-radius:14px;background:#fff;box-shadow:0 2px 10px rgba(11,27,63,.12)}
 #installBar img{width:40px;height:40px;border-radius:11px;flex:none}
 #installBar .t{flex:1;min-width:0;font-size:13px;line-height:1.35}#installBar .t b{display:block;font-size:14px}
@@ -205,6 +209,7 @@ body.sel #topBtn{bottom:calc(84px + var(--sab))}
     </div>
     <div class="chips" id="chips"></div>
   </header>
+  <div id="offBar" hidden><div class="t"><b>서버와 연결이 끊겼어요</b><span id="offTxt">PC 서버가 꺼졌거나 주소가 바뀌었을 수 있어요. 30초마다 다시 시도해요.</span></div><button type="button" id="offRetry">지금 다시</button></div>
   <div id="installBar" hidden><img src="icons/icon-192.png?v=2" alt=""><div class="t"><b>앱으로 설치하기</b><span id="installTxt">홈 화면에 아이콘으로 두고 바로 열어요</span></div><button type="button" class="go" id="installGo">설치</button><button type="button" class="x" id="installX" aria-label="닫기">×</button></div>
   <main id="grid"></main>
   <div id="upbar" hidden>
@@ -246,7 +251,7 @@ body.sel #topBtn{bottom:calc(84px + var(--sab))}
 <script>
 (() => {
 'use strict';
-const VER = 'v21';
+const VER = 'v22';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -499,13 +504,29 @@ document.querySelector('.hrow .ttl').addEventListener('click', () => goHome());
 function goHome() { if (CUR === 'home') { window.scrollTo(0, 0); return; } if (STACK.length) closeTop(); else { CUR = 'home'; render(); } window.scrollTo(0, 0); }
 function openFolder(id) { if (SEL) selOff(); CUR = id; pages = 1; FAV_ONLY = false; if (!STACK.length) pushLayer(() => { CUR = 'home'; pages = 1; if (SEL) selOff(); render(); }); render(); window.scrollTo(0, 0); }
 $('#foldBtn').addEventListener('click', () => { LS.set('album.chips', PREF.chips ? '0' : '1'); paintHead(); measureHead(); });
+let offT = 0;
+function setOffline(on, msg) {
+  $('#offBar').hidden = !on;
+  if (msg) $('#offTxt').textContent = msg;
+  clearTimeout(offT);
+  if (on) offT = setTimeout(() => load(true), 30000);
+}
+$('#offRetry').addEventListener('click', () => { toast('다시 연결하는 중…', 1500); load(true); });
 async function load(quiet) {
   try {
     const j = await api('/api/album/photos', { timeout: 60000 });
     PHOTOS = j.photos; USAGE = j; FOLDERS = j.folders || []; lastLoad = Date.now();
     if (!['home', 'all', ''].includes(CUR) && !FOLDERS.some(f => f.id === CUR)) CUR = 'home';
+    if (!$('#offBar').hidden) toast('다시 연결됐어요', 1500);
+    setOffline(false);
     paintHead(); render();
-  } catch (err) { if (!quiet) toast(err.message); }
+  } catch (err) {
+    if (/연결할 수 없어요|응답이 이상해요|시간/.test(err.message)) {
+      // github.io에서는 저장소에 적힌 주소가 바뀌었을 수 있으니 다시 읽어 본다
+      if (PAGES_HOST) { const pub = await publishedSrv(); if (pub && pub !== SRV) { SRV = pub; LS.del('album.srv'); toast('서버 주소가 바뀌어 새 주소로 연결해요', 2500); return load(true); } }
+      setOffline(true, PAGES_HOST ? 'PC 서버가 꺼졌거나 새 주소가 아직 등록되지 않았어요. 30초마다 다시 시도해요.' : 'PC 서버가 켜져 있는지 확인해 주세요. 30초마다 다시 시도해요.');
+    } else if (!quiet) toast(err.message);
+  }
 }
 const visible = () => (CUR === 'home' || CUR === 'all' ? PHOTOS : PHOTOS.filter(p => (p.folder || '') === CUR)).filter(p => !FAV_ONLY || p.fav);
 const folderName = id => id === 'home' ? '첫 화면' : id === 'all' ? '전체 사진' : id === '' ? '폴더 없음' : ((FOLDERS.find(f => f.id === id) || {}).name || '폴더');
@@ -743,7 +764,18 @@ $('#menuBtn').addEventListener('click', async () => {
 
 // ---------- 올리기
 let upQueue = [], upBusy = false, upStop = false, upXhr = null, upDone = 0, upFail = [], lastDraw = 0;
+let upTarget = null;   // 첫 화면에서 올릴 때 고른 폴더(한 번 쓰고 비움)
 $('#fab').addEventListener('click', async () => {
+  upTarget = null;
+  if (CUR === 'home' || CUR === 'all') {   // 어느 폴더에 넣을지 먼저 고른다
+    const items = [...FOLDERS.map(f => ({ k: f.id, icon: I_FOLDER, label: f.name, sub: `${PHOTOS.filter(p => p.folder === f.id).length}장` })), { k: '', icon: I_FOLDER, label: '폴더 없음', sub: '기본 위치' }, { k: '__new', icon: I_FOLDER, label: '+ 새 폴더 만들어 올리기' }];
+    const f = await sheet('어느 폴더에 올릴까요?', items);
+    if (!f) return;
+    if (f.k === '__new') {
+      const v = await dialog({ title: '새 폴더', placeholder: '폴더 이름', okText: '만들기' }); if (v === null || !v.trim()) return;
+      try { const j = await api('/api/album/folders', { method: 'POST', json: { name: v.trim() } }); FOLDERS = j.folders; upTarget = j.folder.id; render(); } catch (err) { toast(err.message, 3000); return; }
+    } else upTarget = f.k;
+  }
   const it = await sheet('사진 올리기', [
     { k: 'pick', icon: I.pick, label: '앨범에서 고르기', sub: '여러 장 한꺼번에 가능' },
     { k: 'cam', icon: I.cam, label: '지금 찍기' },
@@ -760,11 +792,11 @@ function addFiles(files) {
   if (!imgs.length) { toast('사진 파일만 올릴 수 있어요'); return; }
   if (imgs.length < files.length) toast(`사진이 아닌 파일 ${files.length - imgs.length}개는 뺐어요`);
   // 이어서 올릴 때 겹친 사진(같은 폴더에 같은 이름·크기)은 건너뛴다
-  const dest = (CUR === 'all' || CUR === 'home') ? '' : CUR;
+  const dest = (CUR === 'all' || CUR === 'home') ? (upTarget || '') : CUR;
   const have = new Set(PHOTOS.filter(p => (p.folder || '') === dest).map(p => p.name + '|' + p.size));
   const dup = imgs.filter(f => have.has(f.name + '|' + f.size)).length;
   if (dup) { imgs = imgs.filter(f => !have.has(f.name + '|' + f.size)); toast(`이미 있는 사진 ${dup}장은 건너뛰어요`, 2500); if (!imgs.length) return; }
-  if (!upQueue.length && !upBusy) { upDone = 0; upFail = []; upStop = false; if (CUR === 'home' || CUR === 'all') toast("'폴더 없음'에 올려요. 폴더 안에서 올리면 그 폴더에 들어가요", 2500); }
+  if (!upQueue.length && !upBusy) { upDone = 0; upFail = []; upStop = false; if ((CUR === 'home' || CUR === 'all') && !upTarget) toast("'폴더 없음'에 올려요", 1800); }
   upQueue.push(...imgs);
   pump();
 }
@@ -779,7 +811,7 @@ async function pump() {
     try {
       const meta = await prepImage(f);
       const taken = (await exifTaken(f)) || f.lastModified || Date.now();
-      const qs = new URLSearchParams({ name: f.name.slice(0, 120), taken: String(Math.round(taken)), w: String(meta.w), h: String(meta.h), folder: (CUR === 'all' || CUR === 'home' ? '' : CUR) });
+      const qs = new URLSearchParams({ name: f.name.slice(0, 120), taken: String(Math.round(taken)), w: String(meta.w), h: String(meta.h), folder: (CUR === 'all' || CUR === 'home' ? (upTarget || '') : CUR) });
       upUI(`${n}/${tot()} 올리는 중 · ${f.name}`, 0);
       const j = await xhrUpload(`${SRV}/api/album/upload?${qs}`, f, fr => upUI(`${n}/${tot()} 올리는 중 · ${f.name} · ${Math.round(fr * 100)}%`, fr));
       if (meta.thumb) { try { await xhrUpload(`${SRV}/api/album/thumb/${j.photo.id}`, meta.thumb); j.photo.thumb = true; } catch (_) {} }
@@ -983,6 +1015,14 @@ async function publicDialog() {
     try { const j = await api('/api/album/github-token', { method: 'POST', json: { token: v.trim() } }); ME.has_token = true; ME.published = j.published; ME.public_url = j.public_url || ME.public_url; toast(j.published, 4000); await maybePublish(); }
     catch (err) { toast(err.message, 4000); }
   }
+}
+
+// ---------- 당겨서 새로고침: 맨 위에서 아래로 80px 넘게 당기면 다시 불러온다
+{
+  let y0 = -1, pulled = false;
+  document.addEventListener('touchstart', e => { y0 = (window.scrollY <= 0 && !$('#main').hidden && !vOpen && !STACK.length) ? e.touches[0].clientY : -1; pulled = false; }, { passive: true });
+  document.addEventListener('touchmove', e => { if (y0 < 0) return; const dy = e.touches[0].clientY - y0; if (dy > 80 && !pulled) { pulled = true; $('#refreshBtn').style.opacity = '.5'; } }, { passive: true });
+  document.addEventListener('touchend', async () => { if (pulled) { pulled = false; y0 = -1; await load(); $('#refreshBtn').style.opacity = ''; toast('새로 불러왔어요', 1000); } }, { passive: true });
 }
 
 // ---------- 앱 설치(PWA): 크롬(PC·안드로이드)은 한 번 눌러 설치, 아이폰은 안내
