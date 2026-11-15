@@ -5,7 +5,7 @@ r"""
   폴더 구성(이 파일이 있는 곳 기준)
     data\config.json   설정(포트·접속코드 해시·허용 주소·사진 폴더)
     data\album.db      사진 목록(SQLite)
-    사진\               사진 원본(<id>) + 미리보기(<id>.t.jpg)  ← config.json의 photos_dir로 바꿀 수 있음
+    D:\사진저장소\      사진 원본(<id>.jpg 등) + 미리보기(<id>.t.jpg). 윈도우에 D:\사진저장소 가 있으면 여기가 기본(2.6), 없으면 server\사진. config.json의 photos_dir로 바꿀 수 있음
     사진\<폴더이름>\      화면에서 만든 폴더(앨범)의 사진은 그 이름의 하위 폴더에 들어간다
 
   실행: start.bat (자동 업데이트 포함)  /  접속코드 바꾸기: set-code.bat 또는 --set-code 새코드
@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '2.5'
+VERSION = '2.6'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -49,7 +49,7 @@ def load_conf():
         'port': 4848,
         'code_hash': CODE_HASH_DEFAULT,                 # 접속코드(해시로만 저장)
         'admin_code_hash': ADMIN_HASH_DEFAULT,          # 1.9: 관리자 코드(해시로만 저장)
-        'photos_dir': os.path.join(BASE, '사진'),       # 사진이 저장되는 폴더(다른 드라이브·폴더로 바꿀 수 있음)
+        'photos_dir': '',                               # 사진이 저장되는 폴더. 비우면 기본(윈도우: D:\사진저장소, 아니면 server\사진). 다른 곳으로 바꿀 수 있음
         'max_store_mb': 20480,                          # 사진 총량(MB)
         'allowed_origins': ['https://kwonyujin119.github.io'],   # 화면(github.io)에서 오는 요청 허용
         'auto_update': True,                            # GitHub의 server/album_server.py가 새 버전이면 스스로 교체하고 다시 켬
@@ -86,8 +86,23 @@ def write_conf(conf):
 
 
 CONF = load_conf()
-PHOTOS = str(CONF.get('photos_dir') or os.path.join(BASE, '사진'))
+OLD_PHOTOS = os.path.join(BASE, '사진')   # 2.5까지의 기본 위치
+
+
+def default_photos_dir():
+    """2.6: 윈도우에 D:\사진저장소 가 있으면 사진은 거기에(탐색기에서 바로 보이게). 아니면 server\사진."""
+    if os.name == 'nt' and os.path.isdir('D:\\사진저장소'):
+        return 'D:\\사진저장소'
+    return OLD_PHOTOS
+
+
+PHOTOS = str(CONF.get('photos_dir') or '')
+if not PHOTOS or os.path.normcase(os.path.abspath(PHOTOS)) == os.path.normcase(OLD_PHOTOS):
+    PHOTOS = default_photos_dir()   # 옛 기본값(server\사진)을 쓰고 있었으면 새 기본값으로 — 파일은 켤 때 옮긴다(migrate_photos)
 os.makedirs(PHOTOS, exist_ok=True)
+RESERVED_DIRS = {'server', 'icons', 'img', 'web', 'data', '사진'}   # 사진 폴더 안에서 앨범 폴더로 쓰지 않는 이름(앱 파일 폴더)
+EXT_OF = {'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif'}
+PHOTO_RE = re.compile(r'^([a-f0-9]{24})(\.(jpe?g|png|webp|gif))?$')   # 원본 파일 이름(2.6부터 확장자 포함, 예전 것은 없음)
 
 
 def web_dir():
@@ -144,7 +159,7 @@ DB.commit()
 def folder_name_ok(name):
     name = re.sub(r'[\x00-\x1f\x7f<>:"/\\|?*]', '', str(name or '')).strip().strip('.')
     name = re.sub(r'\s+', ' ', name)[:40]
-    return name if name and name.lower() not in ('con', 'prn', 'aux', 'nul') else ''
+    return name if name and name.lower() not in ('con', 'prn', 'aux', 'nul') and name.lower() not in RESERVED_DIRS else ''
 
 
 def folder_row(r, counts):
@@ -167,16 +182,99 @@ def photo_dir(folder_id):
     return PHOTOS
 
 
-def photo_path(r):
+def photo_base(r):
+    """폴더/<id> (확장자 없음). 미리보기는 여기에 '.t.jpg'를 붙인다."""
     return os.path.join(photo_dir(r['folder'] if 'folder' in r.keys() else ''), r['id'])
 
 
-def disk_photo_count():
-    n = 0
+def photo_file(r, for_write=False):
+    """원본 파일의 실제 경로. 2.6부터는 <id>.jpg 처럼 확장자를 붙여 저장하고, 예전 파일(<id>)도 그대로 찾는다."""
+    base = photo_base(r)
+    ext = EXT_OF.get(r['mime'] or '', '.jpg')
+    if for_write:
+        return base + ext
+    for cand in (base + ext, base, base + '.jpg', base + '.jpeg', base + '.png', base + '.webp', base + '.gif'):
+        if os.path.exists(cand):
+            return cand
+    return base + ext
+
+
+def photo_path(r):   # 예전 이름 유지(읽기용)
+    return photo_file(r)
+
+
+def photo_walk():
+    """사진 폴더와 하위 폴더 한 단계의 (폴더 상대경로, 파일 이름, id) 목록. 앱 파일 폴더(server·icons…)는 건너뛴다."""
+    out = []
     for root, dirs, files in os.walk(PHOTOS):
-        n += sum(1 for f in files if re.fullmatch(r'[a-f0-9]{24}', f))
-        if root != PHOTOS:
-            dirs[:] = []   # 하위 폴더 한 단계만
+        rel = os.path.relpath(root, PHOTOS)
+        if root == PHOTOS:
+            dirs[:] = [d for d in dirs if d.lower() not in RESERVED_DIRS and not d.startswith('.')]
+        else:
+            dirs[:] = []
+        for fn in files:
+            m = PHOTO_RE.match(fn)
+            if m:
+                out.append((rel, fn, m.group(1)))
+    return out
+
+
+def disk_photo_count():
+    return len(photo_walk())
+
+
+def migrate_photos(old, new):
+    """2.6: 옛 사진 폴더(server\사진)의 내용을 새 위치로 옮긴다(같은 드라이브면 즉시). 이미 있는 파일은 건너뛴다. 돌려주는 값: 옮긴 항목 수."""
+    moved = 0
+    if not os.path.isdir(old) or os.path.normcase(os.path.abspath(old)) == os.path.normcase(os.path.abspath(new)):
+        return 0
+    for name in os.listdir(old):
+        src = os.path.join(old, name)
+        dst = os.path.join(new, name)
+        try:
+            if os.path.isdir(src):
+                os.makedirs(dst, exist_ok=True)
+                for fn in os.listdir(src):
+                    s2, d2 = os.path.join(src, fn), os.path.join(dst, fn)
+                    if not os.path.exists(d2):
+                        os.replace(s2, d2)
+                        moved += 1
+                try:
+                    os.rmdir(src)
+                except OSError:
+                    pass
+            elif not os.path.exists(dst):
+                os.replace(src, dst)
+                moved += 1
+        except OSError as e:
+            print('[앨범] 옮기기 실패:', src, str(e)[:80], flush=True)
+    try:
+        os.rmdir(old)
+    except OSError:
+        pass
+    if moved:
+        print(f'[앨범] 사진 {moved}개를 {new} 로 옮겼습니다', flush=True)
+        upd_log(f'사진 폴더 이동: {old} → {new} ({moved}개)')
+    return moved
+
+
+def add_extensions():
+    """2.6: 확장자 없는 예전 원본 파일(<id>)에 .jpg 등을 붙인다(탐색기에서 바로 열리게). 돌려주는 값: 바꾼 수."""
+    n = 0
+    for rel, fn, pid in photo_walk():
+        if fn != pid:
+            continue
+        fp = os.path.join(PHOTOS, rel, fn) if rel != '.' else os.path.join(PHOTOS, fn)
+        try:
+            with open(fp, 'rb') as fh:
+                kind = sniff(fh.read(16))
+            if kind and not os.path.exists(fp + kind[1]):
+                os.replace(fp, fp + kind[1])
+                n += 1
+        except OSError:
+            pass
+    if n:
+        print(f'[앨범] 예전 사진 파일 {n}개에 확장자를 붙였습니다', flush=True)
     return n
 
 
@@ -185,38 +283,37 @@ def import_orphans():
     폴더 이름은 하위 폴더 이름 그대로, 찍은 시각은 파일 시각, 메모·좋아요는 복구되지 않는다."""
     known = {r['id'] for r in q('SELECT id FROM photos')}
     added = 0
-    for root, dirs, files in os.walk(PHOTOS):
-        rel = os.path.relpath(root, PHOTOS)
-        if root != PHOTOS:
-            dirs[:] = []
+    folder_ids = {}
+    for rel, fn, pid in photo_walk():
+        if pid in known:
+            continue
         folder_id = ''
         if rel != '.':
-            name = folder_name_ok(rel)
-            if not name:
-                continue
-            f = q('SELECT id FROM folders WHERE name=?', (name,), one=True)
-            if f:
-                folder_id = f['id']
-            else:
-                folder_id = secrets.token_hex(8)
-                q('INSERT INTO folders(id,name,ts) VALUES(?,?,?)', (folder_id, name, time.time()), commit=True)
-        for fn in files:
-            if not re.fullmatch(r'[a-f0-9]{24}', fn) or fn in known:
-                continue
-            fp = os.path.join(root, fn)
-            try:
-                with open(fp, 'rb') as fh:
-                    kind = sniff(fh.read(16))
-                if not kind:
+            if rel not in folder_ids:
+                name = folder_name_ok(rel)
+                if not name:
                     continue
-                st = os.stat(fp)
-            except OSError:
+                f = q('SELECT id FROM folders WHERE name=?', (name,), one=True)
+                if f:
+                    folder_ids[rel] = f['id']
+                else:
+                    folder_ids[rel] = secrets.token_hex(8)
+                    q('INSERT INTO folders(id,name,ts) VALUES(?,?,?)', (folder_ids[rel], name, time.time()), commit=True)
+            folder_id = folder_ids[rel]
+        fp = os.path.join(PHOTOS, rel, fn) if rel != '.' else os.path.join(PHOTOS, fn)
+        try:
+            with open(fp, 'rb') as fh:
+                kind = sniff(fh.read(16))
+            if not kind:
                 continue
-            thumb = 1 if os.path.exists(fp + '.t.jpg') else 0
-            q('INSERT OR IGNORE INTO photos(id,who,name,mime,size,w,h,memo,taken,ts,thumb,folder) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-              (fn, '', '사진' + kind[1], kind[0], st.st_size, 0, 0, '', st.st_mtime, st.st_mtime, thumb, folder_id), commit=True)
-            known.add(fn)
-            added += 1
+            st = os.stat(fp)
+        except OSError:
+            continue
+        thumb = 1 if os.path.exists(os.path.join(os.path.dirname(fp), pid + '.t.jpg')) else 0
+        q('INSERT OR IGNORE INTO photos(id,who,name,mime,size,w,h,memo,taken,ts,thumb,folder) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+          (pid, '', '사진' + kind[1], kind[0], st.st_size, 0, 0, '', st.st_mtime, st.st_mtime, thumb, folder_id), commit=True)
+        known.add(pid)
+        added += 1
     if added:
         print(f'[앨범] 사진 폴더에서 목록에 없던 사진 {added}장을 되살렸습니다', flush=True)
         upd_log(f'사진 폴더 다시 읽기: {added}장 복구')
@@ -504,9 +601,10 @@ class H(BaseHTTPRequestHandler):
                 r = q('SELECT * FROM photos WHERE id=?', (m.group(2),), one=True)
                 if not r:
                     return self.err(404, '사진이 없습니다')
-                fp = photo_path(r)
-                if m.group(1) == 'thumb' and r['thumb'] and os.path.exists(fp + '.t.jpg'):
-                    return self.send_file(fp + '.t.jpg', 'image/jpeg', 'inline', 'private, max-age=31536000, immutable')
+                fp = photo_file(r)
+                tp = photo_base(r) + '.t.jpg'
+                if m.group(1) == 'thumb' and r['thumb'] and os.path.exists(tp):
+                    return self.send_file(tp, 'image/jpeg', 'inline', 'private, max-age=31536000, immutable')
                 if not os.path.exists(fp):
                     return self.err(404, '사진 파일이 없습니다')
                 disp = ('attachment' if args.get('dl') else 'inline') + "; filename*=UTF-8''" + urllib.parse.quote(r['name'] or 'photo')
@@ -565,6 +663,8 @@ class H(BaseHTTPRequestHandler):
                 return self.thumb_put(m.group(1))
             if path == '/api/album/folders':   # 1.3: 폴더(앨범) 만들기 — 디스크에도 같은 이름의 폴더
                 b = self.body_json()
+                if str(b.get('name') or '').strip().lower() in RESERVED_DIRS:
+                    return self.err(400, '그 이름은 앱 파일 폴더와 겹쳐서 쓸 수 없어요. 다른 이름을 적어 주세요')
                 name = folder_name_ok(b.get('name'))
                 if not name:
                     return self.err(400, '폴더 이름을 적어 주세요(특수문자 \\ / : * ? " < > | 제외, 40자까지)')
@@ -612,10 +712,12 @@ class H(BaseHTTPRequestHandler):
                     if dest and not q('SELECT id FROM folders WHERE id=?', (dest,), one=True):
                         return self.err(404, '옮길 폴더가 없어요')
                     if dest != (r['folder'] or ''):
-                        src, dst = photo_path(r), os.path.join(photo_dir(dest), r['id'])
-                        for suf in ('', '.t.jpg'):
-                            if os.path.exists(src + suf):
-                                os.replace(src + suf, dst + suf)
+                        srcf, srcb = photo_file(r), photo_base(r)
+                        dstb = os.path.join(photo_dir(dest), r['id'])
+                        if os.path.exists(srcf):
+                            os.replace(srcf, dstb + os.path.splitext(srcf)[1])
+                        if os.path.exists(srcb + '.t.jpg'):
+                            os.replace(srcb + '.t.jpg', dstb + '.t.jpg')
                         q('UPDATE photos SET folder=? WHERE id=?', (dest, r['id']), commit=True)
                 if 'fav' in b:   # 2.0: 좋아요 켜기/끄기(누구나)
                     q('UPDATE photos SET fav=? WHERE id=?', (1 if b.get('fav') else 0, r['id']), commit=True)
@@ -751,8 +853,7 @@ class H(BaseHTTPRequestHandler):
             r = q('SELECT * FROM photos WHERE id=?', (m.group(1),), one=True)
             if not r:
                 return self.err(404, '사진이 없습니다')
-            fp = photo_path(r)
-            for p in (fp, fp + '.t.jpg'):
+            for p in (photo_file(r), photo_base(r), photo_base(r) + '.t.jpg'):
                 try:
                     if os.path.exists(p):
                         os.remove(p)
@@ -817,7 +918,7 @@ class H(BaseHTTPRequestHandler):
         if folder and not q('SELECT id FROM folders WHERE id=?', (folder,), one=True):
             folder = ''
         fid = secrets.token_hex(12)
-        fp = os.path.join(photo_dir(folder), fid)
+        fp = os.path.join(photo_dir(folder), fid)   # 확장자는 내용을 보고 붙인다(아래)
         tmp = fp + '.up'
         head, left = b'', n
         try:
@@ -834,7 +935,7 @@ class H(BaseHTTPRequestHandler):
             kind = sniff(head[:16])
             if not kind:
                 return self.err(415, '사진(JPG·PNG·WEBP·GIF)만 올릴 수 있습니다')
-            os.replace(tmp, fp)
+            os.replace(tmp, fp + kind[1])
         finally:
             if os.path.exists(tmp):
                 os.remove(tmp)
@@ -856,7 +957,7 @@ class H(BaseHTTPRequestHandler):
         self._body_read = True
         if len(data) != n or not data.startswith(b'\xff\xd8\xff'):
             return self.err(415, 'JPEG만 받습니다')
-        with open(photo_path(r) + '.t.jpg', 'wb') as f:
+        with open(photo_base(r) + '.t.jpg', 'wb') as f:
             f.write(data)
         q('UPDATE photos SET thumb=1 WHERE id=?', (fid,), commit=True)
         return self.send(200, {'ok': True})
@@ -1377,7 +1478,7 @@ def main():
         os.makedirs(d, exist_ok=True)
         CONF['photos_dir'] = d
         write_conf(CONF)
-        print('사진 폴더 저장 완료:', d, '(서버를 다시 켜면 적용. 이미 올린 사진은 옛 폴더의 파일을 새 폴더로 옮겨 주세요)')
+        print('사진 폴더 저장 완료:', d, '(서버를 다시 켜면 적용. 옛 폴더의 사진은 직접 옮긴 뒤 /update의 "사진 폴더 다시 읽기"를 누르세요)')
         return
     port = int(to_int(CONF.get('port'), 4848, 1, 65535))
     srv = None
@@ -1404,9 +1505,15 @@ def main():
     threading.Thread(target=auto_update_loop, args=(srv,), daemon=True).start()
     def _rescan():
         try:
+            if os.path.normcase(os.path.abspath(PHOTOS)) != os.path.normcase(OLD_PHOTOS):
+                migrate_photos(OLD_PHOTOS, PHOTOS)   # 2.6: server\사진 → D:\사진저장소
+                if str(CONF.get('photos_dir') or '') != PHOTOS:
+                    CONF['photos_dir'] = PHOTOS
+                    write_conf(CONF)
+            add_extensions()
             import_orphans()
         except Exception as e:
-            print('[앨범] 사진 폴더 다시 읽기 실패:', str(e)[:120], flush=True)
+            print('[앨범] 사진 폴더 정리 실패:', str(e)[:120], flush=True)
     threading.Thread(target=_rescan, daemon=True).start()   # 2.2: 목록(DB)이 비었거나 폴더를 옮겼어도 파일이 있으면 되살린다
     if CONF.get('auto_update'):
         threading.Thread(target=web_update_loop, daemon=True).start()

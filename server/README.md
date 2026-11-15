@@ -1,6 +1,6 @@
 # 유진·아름 사진 저장소 — 서버 (PC 한 대로 끝, 도메인 불필요)
 
-다른 프로그램이나 도메인 없이 **이 폴더 하나**로 돕니다. 사진은 이 폴더 안 `사진\` 폴더에만 저장됩니다. GitHub에는 올라가지 않습니다.
+다른 프로그램이나 도메인 없이 **이 폴더 하나**로 돕니다. 사진은 **`D:\사진저장소`** 바로 아래에 폴더(앨범) 이름 그대로 저장됩니다(2.6부터, 파일은 `<id>.jpg`처럼 확장자가 붙어 탐색기에서 바로 열림). `D:\사진저장소`가 없는 PC에서는 `server\사진\`. GitHub에는 올라가지 않습니다.
 
 ## 0. 가장 쉬운 길 — fix.bat 한 번 (정리 + 최신화 + 켜기)
 
@@ -13,7 +13,7 @@ ZIP을 받아 풀고 `server\fix.bat`을 더블클릭하면 끝입니다. 돌고
    - 그 안에 `index.html`(화면)과 `server` 폴더(서버)가 함께 있어야 합니다. `server` 폴더만 따로 떼어 두면 화면이 안 나옵니다.
 3. `D:\사진저장소\server\start.bat` 더블클릭 → 검은 창에 "사진 저장소 서버"와 주소 두 줄이 뜨면 켜진 것입니다. (Python 3 필요: https://www.python.org/downloads/ 에서 설치할 때 "Add python.exe to PATH" 체크)
 
-만들어지는 것: `server\data\config.json`(설정), `server\data\album.db`(목록), `server\사진\`(사진 원본·미리보기)
+만들어지는 것: `server\data\config.json`(설정), `server\data\album.db`(목록), `D:\사진저장소\<폴더이름>\`(사진 원본·미리보기). 예전 `server\사진\`에 있던 사진은 서버를 켤 때 자동으로 옮겨집니다.
 
 ## 2. 쓰기
 
@@ -51,5 +51,5 @@ ZIP을 받아 풀고 `server\fix.bat`을 더블클릭하면 끝입니다. 돌고
   ```
 - 자동 업데이트: 10분마다 GitHub의 `server/album_server.py`가 새 버전이면 스스로 교체하고 다시 켭니다(`start.bat`으로 켰을 때만).
 - 용량: 사진 1장 30MB, 전체 20GB(`data\config.json`의 `max_store_mb`).
-- 백업할 것: `server\사진\` 폴더와 `server\data\album.db`.
+- 백업할 것: `D:\사진저장소`의 사진 폴더들과 `server\data\album.db`.
 - 서버 창을 닫거나 PC가 꺼지면 폰에서 사진을 보지 못합니다.

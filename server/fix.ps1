@@ -54,10 +54,12 @@ function Get-PhotosDir($srvDir) {
   if (Test-Path $cfg) {
     try { $j = Get-Content $cfg -Raw -Encoding UTF8 | ConvertFrom-Json; if ($j.photos_dir -and (Test-Path $j.photos_dir)) { return $j.photos_dir } } catch {}
   }
+  $up = Split-Path -Parent $srvDir
+  if ((Split-Path -Leaf $srvDir) -eq 'server' -and (Split-Path -Leaf $up) -eq '사진저장소') { return $up }   # 2.6: 표준 위치는 D:\사진저장소 바로 아래
   return (Join-Path $srvDir '사진')
 }
 # 표준 폴더 자신이 예전부터 쓰던 곳이면 그 사진 폴더(설정상 다른 위치일 수 있음)도 후보에
-$targetPhotos = Get-PhotosDir $Target
+$targetPhotos = $Root   # 2.6: 사진은 D:\사진저장소 바로 아래(탐색기에서 바로 보임)
 foreach ($dir in $found) {
   $photos = Get-PhotosDir $dir
   $n = 0
@@ -71,6 +73,7 @@ foreach ($dir in $found) {
       $rel = $_.FullName.Substring($photos.TrimEnd('\').Length).TrimStart('\')
       $dst = Join-Path $targetPhotos $rel
       if (-not (Test-Path $dst)) {
+        if ($rel -match '^(server|icons|img|web|data)\\') { return }
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dst) | Out-Null
         Copy-Item $_.FullName $dst -ErrorAction SilentlyContinue
         $script:copied++
@@ -106,15 +109,15 @@ if ($cfgPicked -and -not (Test-Path $tcfg)) { Copy-Item $cfgPicked $tcfg -Force;
 if (Test-Path $tcfg) {
   try {
     $j = Get-Content $tcfg -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($j.photos_dir -and ($j.photos_dir -ne (Join-Path $Target '사진'))) {
+    if ($j.photos_dir -and ($j.photos_dir -ne $Root)) {
       # 그 폴더의 사진도 표준 폴더로 복사
       if (Test-Path $j.photos_dir) {
         Get-ChildItem -Path $j.photos_dir -Recurse -Depth 1 -File -ErrorAction SilentlyContinue | ForEach-Object {
-          $rel = $_.FullName.Substring($j.photos_dir.TrimEnd('\').Length).TrimStart('\'); $dst = Join-Path (Join-Path $Target '사진') $rel
+          $rel = $_.FullName.Substring($j.photos_dir.TrimEnd('\').Length).TrimStart('\'); $dst = Join-Path $Root $rel
           if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dst) | Out-Null; Copy-Item $_.FullName $dst -ErrorAction SilentlyContinue }
         }
       }
-      $j.photos_dir = (Join-Path $Target '사진')
+      $j.photos_dir = $Root
       [IO.File]::WriteAllText($tcfg, ($j | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding $false))   # BOM 없이(서버가 읽음)
     }
   } catch {}
