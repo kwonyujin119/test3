@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '2.6'
+VERSION = '2.7'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -1080,17 +1080,56 @@ def http_get(url, limit, timeout=30, headers=None):
     return data[:limit]
 
 
-def fetch_text(url, limit, timeout=30):
-    last = None
-    for u in (url, url.replace('https://raw.githubusercontent.com/kwonyujin119/test3/main', ALT_BASE)):
+REPO = 'kwonyujin119/test3'
+RAW_BASE = 'https://raw.githubusercontent.com/' + REPO + '/main'
+
+
+def gh_api(path, limit=3_000_000, timeout=30):
+    """2.7: GitHub API(api.github.com)로 읽기. 토큰이 있으면 붙인다(시간당 5000번, 없으면 60번)."""
+    hdr = {'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}
+    tok = str(CONF.get('github_token') or '')
+    if tok:
+        hdr['Authorization'] = 'Bearer ' + tok
+    return json.loads(http_get('https://api.github.com' + path, limit, timeout, headers=hdr).decode('utf-8'))
+
+
+def fetch_repo_file(rel, check=None, limit=20_000_000):
+    """저장소(main)의 파일 하나를 받는다. raw → github.io → GitHub API 순서로, check(bytes)가 참인 결과만 믿는다.
+    (이 PC처럼 raw·github.io가 차단 페이지로 바뀌어 오는 망에서는 API만 통한다.)"""
+    base = str(CONF.get('update_url') or '').rsplit('/server/', 1)[0] or RAW_BASE
+    errs = []
+    for src in ('base', 'pages', 'api'):
         try:
-            return http_get(u, limit, timeout).decode('utf-8')
+            if src == 'base':
+                data = http_get(f'{base}/{rel}?t={int(time.time())}', limit, 30)
+            elif src == 'pages':
+                if base.startswith('http://127.0.0.1'):
+                    continue
+                data = http_get(f'{ALT_BASE}/{rel}?t={int(time.time())}', limit, 30)
+            else:
+                if base.startswith('http://127.0.0.1'):
+                    continue
+                import base64
+                j = gh_api(f'/repos/{REPO}/contents/{rel}?ref=main')
+                if j.get('encoding') == 'base64' and j.get('content'):
+                    data = base64.b64decode(j['content'])
+                elif j.get('download_url'):
+                    data = http_get(j['download_url'], limit, 60)
+                else:
+                    raise ValueError('API 응답에 내용이 없음')
+            if check and not check(data):
+                raise ValueError('받은 파일 모양이 아님')
+            return data
         except Exception as e:
-            last = e
-            if u == url and ALT_BASE not in url:
-                continue
-            raise
-    raise last
+            errs.append(f'{src}: {str(e)[:60]}')
+    raise RuntimeError(' / '.join(errs)[:200])
+
+
+def fetch_text(url, limit, timeout=30):
+    rel = url.split('?')[0].rsplit('/server/', 1)
+    if len(rel) == 2:
+        return fetch_repo_file('server/' + rel[1], check=lambda d: b"VERSION = '" in d and b'ThreadingHTTPServer' in d, limit=limit).decode('utf-8')
+    return http_get(url, limit, timeout).decode('utf-8')
 
 
 def upd_log(msg):
@@ -1314,20 +1353,25 @@ def update_web():
     if not base.startswith(('https://', 'http://127.0.0.1')):
         return
     wd = os.path.join(BASE, 'web')
+    sha_file = os.path.join(DATA, 'web_sha.txt')
+    if not base.startswith('http://127.0.0.1'):
+        try:   # 2.7: main의 최신 커밋이 지난번과 같으면 받을 것이 없다(API 1번으로 끝)
+            sha = str(gh_api(f'/repos/{REPO}/commits/main', limit=200_000).get('sha') or '')
+            if sha and os.path.exists(sha_file) and open(sha_file, encoding='utf-8').read().strip() == sha and os.path.exists(os.path.join(wd, 'index.html')):
+                WEB_STATE['msg'] = '이미 최신'
+                return WEB_STATE['msg']
+        except Exception:
+            sha = ''
+    else:
+        sha = ''
     changed = 0
     errors = []
+    checks = {'index.html': lambda d: len(d) > 10_000 and b'</html>' in d and b'const VER = ' in d,
+              'manifest.webmanifest': lambda d: b'"start_url"' in d, 'sw.js': lambda d: b'addEventListener' in d}
     for rel in WEB_FILES:
         try:
-            data = None
-            for b2 in (base, ALT_BASE):
-                try:
-                    data = http_get(f'{b2}/{rel}?t={int(time.time())}', 20_000_000, 30)
-                    break
-                except Exception as e2:
-                    if b2 == ALT_BASE:
-                        raise e2
-            if rel == 'index.html' and (len(data) < 10_000 or b'</html>' not in data):
-                raise ValueError('index.html 모양이 아님')
+            chk = checks.get(rel) or (lambda d: d[:4] == b'\x89PNG' or d[:3] == b'\xff\xd8\xff')
+            data = fetch_repo_file(rel, check=chk)
             fp = os.path.join(wd, rel)
             os.makedirs(os.path.dirname(fp), exist_ok=True)
             if os.path.exists(fp) and open(fp, 'rb').read() == data:
@@ -1345,6 +1389,12 @@ def update_web():
                 return WEB_STATE['msg']
     WEB_STATE['msg'] = (f'{changed}개 갱신' if changed else '이미 최신') + (f' (실패 {len(errors)})' if errors else '')
     WEB_STATE['ts'] = time.time()
+    if sha and not errors:
+        try:
+            with open(sha_file, 'w', encoding='utf-8') as f:
+                f.write(sha)
+        except OSError:
+            pass
     if changed:
         print(f'[화면] 화면 파일 {changed}개 갱신(web 폴더)', flush=True)
     return WEB_STATE['msg']

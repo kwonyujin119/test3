@@ -50,6 +50,7 @@ ZIP을 받아 풀고 `server\fix.bat`을 더블클릭하면 끝입니다. 돌고
   py album_server.py --set-photos-dir E:\앨범사진
   ```
 - 자동 업데이트: 10분마다 GitHub의 `server/album_server.py`가 새 버전이면 스스로 교체하고 다시 켭니다(`start.bat`으로 켰을 때만).
+  - 2.7부터 받는 길이 세 가지(raw.githubusercontent.com → kwonyujin119.github.io → api.github.com). 앞의 둘이 차단 페이지로 바뀌어 오는 망에서는 GitHub API로 받습니다(토큰이 등록돼 있으면 더 넉넉함).
 - 용량: 사진 1장 30MB, 전체 20GB(`data\config.json`의 `max_store_mb`).
 - 백업할 것: `D:\사진저장소`의 사진 폴더들과 `server\data\album.db`.
 - 서버 창을 닫거나 PC가 꺼지면 폰에서 사진을 보지 못합니다.
