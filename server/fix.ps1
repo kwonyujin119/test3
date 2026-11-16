@@ -68,8 +68,11 @@ foreach ($dir in $found) {
   }
   Write-Host "   찾음: $dir  (사진 파일 ${n}개)"
   if ($n -gt 0 -and $photos -ne $targetPhotos) {
-    # 사진 파일 복사(있는 파일은 건너뜀, 하위 폴더 유지)
+    # 사진 파일 복사(있는 파일은 건너뜀, 하위 폴더 유지). 많으면 몇 분 걸리므로 100개마다 진행을 보여 준다
+    Write-Host "   → 사진 ${n}개를 $targetPhotos 로 복사하는 중... (이미 있는 파일은 건너뜀)"
+    $seen = 0
     Get-ChildItem -Path $photos -Recurse -Depth 1 -File -ErrorAction SilentlyContinue | ForEach-Object {
+      $script:seen++; if (($script:seen % 100) -eq 0) { Write-Host "      $($script:seen) / $n 확인, $($script:copied)개 복사" }
       $rel = $_.FullName.Substring($photos.TrimEnd('\').Length).TrimStart('\')
       $dst = Join-Path $targetPhotos $rel
       if (-not (Test-Path $dst)) {
@@ -90,7 +93,7 @@ foreach ($dir in $found) {
   $cf = Join-Path $dir 'cloudflared.exe'
   if ((Test-Path $cf) -and -not (Test-Path (Join-Path $Target 'cloudflared.exe'))) { Copy-Item $cf $Target -Force; Write-Host '   cloudflared.exe 가져옴' }
 }
-Write-Host "   사진 파일 $copied개를 표준 폴더로 복사했습니다."
+Write-Host "   사진 파일 ${copied}개를 표준 폴더로 복사했습니다."
 # 목록(album.db): 표준 폴더에 없거나 더 작으면, 찾은 것 중 가장 큰 것을 가져온다(기존 것은 .bak 으로 보관)
 $tdb = Join-Path $Target 'data\album.db'
 if ($dbPicked) {
