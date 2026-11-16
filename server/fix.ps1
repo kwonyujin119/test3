@@ -105,6 +105,18 @@ if ($dbPicked) {
 # 설정(config.json): 표준 폴더에 없을 때만 가져온다(토큰·접속코드 보존)
 $tcfg = Join-Path $Target 'data\config.json'
 if ($cfgPicked -and -not (Test-Path $tcfg)) { Copy-Item $cfgPicked $tcfg -Force; Write-Host "   설정 가져옴: $cfgPicked" }
+# 2.8: 표준 폴더 설정에 GitHub 토큰이 없고 옛 설정에 있으면 토큰만 옮겨 넣는다(폴더를 옮기며 토큰이 빠지던 문제)
+if ($cfgPicked -and (Test-Path $tcfg)) {
+  try {
+    $jt = Get-Content $tcfg -Raw -Encoding UTF8 | ConvertFrom-Json
+    $jo = Get-Content $cfgPicked -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ((-not $jt.github_token) -and $jo.github_token) {
+      if ($jt.PSObject.Properties['github_token']) { $jt.github_token = $jo.github_token } else { $jt | Add-Member -NotePropertyName github_token -NotePropertyValue $jo.github_token }
+      [IO.File]::WriteAllText($tcfg, ($jt | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding $false))
+      Write-Host "   GitHub 토큰 가져옴: $cfgPicked"
+    }
+  } catch {}
+}
 # 설정의 photos_dir 가 다른 곳을 가리키면 표준 사진 폴더로 돌린다(복사해 두었으므로)
 if (Test-Path $tcfg) {
   try {

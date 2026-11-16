@@ -18,7 +18,7 @@ r"""
 import datetime, hashlib, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = '2.7'
+VERSION = '2.8'
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, 'data')
 CONF_PATH = os.path.join(DATA, 'config.json')
@@ -1024,11 +1024,62 @@ def _is_ssl_err(e):
     return 'certificate' in t or 'ssl' in t
 
 
+def curl_http(url, method='GET', headers=None, body=None, out_file=None, timeout=60):
+    """2.8: curl.exe(윈도우 10부터 기본 포함, 윈도우 인증서 저장소 사용)로 HTTP 요청. 본문은 파일로 받는다."""
+    import subprocess, tempfile
+    exe = shutil.which('curl') or (r'C:\Windows\System32\curl.exe' if os.name == 'nt' else None)
+    if not exe or not os.path.exists(exe):
+        raise RuntimeError('curl 없음')
+    tmp_out = out_file or tempfile.NamedTemporaryFile('wb', suffix='.bin', delete=False, dir=DATA).name
+    tmp_body = None
+    args = [exe, '-sS', '-L', '--fail', '--ssl-no-revoke', '--max-time', str(int(timeout)), '-X', method, '-o', tmp_out, '-A', 'album-server']
+    for k, v in (headers or {}).items():
+        args += ['-H', f'{k}: {v}']
+    if body is not None:
+        tmp_body = tempfile.NamedTemporaryFile('wb', suffix='.json', delete=False, dir=DATA)
+        tmp_body.write(body if isinstance(body, bytes) else body.encode('utf-8'))
+        tmp_body.close()
+        args += ['-H', 'Content-Type: application/json', '--data-binary', '@' + tmp_body.name]
+    args.append(url)
+    try:
+        cp = subprocess.run(args, capture_output=True, timeout=timeout + 30)
+        if cp.returncode != 0:
+            raise RuntimeError('curl 실패: ' + cp.stderr.decode('utf-8', 'replace').strip()[:160])
+        if out_file:
+            return b''
+        with open(tmp_out, 'rb') as f:
+            return f.read()
+    finally:
+        for f in ((None if out_file else tmp_out), tmp_body.name if tmp_body else None):
+            try:
+                if f:
+                    os.remove(f)
+            except OSError:
+                pass
+
+
+def sh_http(url, method='GET', headers=None, body=None, out_file=None, timeout=60):
+    """2.8: 파이썬 HTTPS가 인증서 오류로 막힌 PC용 — curl.exe 먼저, 안 되면 PowerShell. 돌려주는 값: 본문(bytes) 또는 out_file에 저장 뒤 b''."""
+    try:
+        return curl_http(url, method, headers, body, out_file, timeout)
+    except Exception as e1:
+        if os.name != 'nt':
+            raise
+        try:
+            return ps_http(url, method, headers, body, out_file, timeout)
+        except Exception as e2:
+            raise RuntimeError(f'{str(e1)[:90]} / {str(e2)[:90]}')
+
+
 def ps_http(url, method='GET', headers=None, body=None, out_file=None, timeout=60):
-    """PowerShell로 HTTP 요청. 돌려주는 값: 본문(bytes) 또는 out_file에 저장 뒤 b''. 윈도우가 아니면 예외."""
+    """PowerShell로 HTTP 요청. 돌려주는 값: 본문(bytes) 또는 out_file에 저장 뒤 b''. 윈도우가 아니면 예외.
+    2.8: 본문을 화면 출력 대신 파일로 받는다(RawContentStream 위치 문제로 빈 본문이 오던 것 방지)."""
     import subprocess, tempfile
     if os.name != 'nt':
         raise RuntimeError('PowerShell 없음')
+    ret_file = None
+    if not out_file:
+        ret_file = out_file = tempfile.NamedTemporaryFile('wb', suffix='.bin', delete=False, dir=DATA).name
     hdr = ''.join(f"$h['{k}'] = '{str(v).replace(chr(39), chr(39) + chr(39))}'\n" for k, v in (headers or {}).items())
     tmp_body = None
     lines = ["[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12", "$ProgressPreference = 'SilentlyContinue'", "$h = @{}", hdr]
@@ -1037,12 +1088,8 @@ def ps_http(url, method='GET', headers=None, body=None, out_file=None, timeout=6
         tmp_body.write(body if isinstance(body, bytes) else body.encode('utf-8'))
         tmp_body.close()
         lines.append(f"$b = [IO.File]::ReadAllText('{tmp_body.name}', [Text.Encoding]::UTF8)")
-    if out_file:
-        lines.append(f"Invoke-WebRequest -Uri '{url}' -Method {method} -Headers $h -OutFile '{out_file}.part' -UseBasicParsing -TimeoutSec {int(timeout)}")
-    else:
-        bpart = ' -Body $b -ContentType "application/json"' if body is not None else ''
-        lines.append(f"$r = Invoke-WebRequest -Uri '{url}' -Method {method} -Headers $h{bpart} -UseBasicParsing -TimeoutSec {int(timeout)}")
-        lines.append("$ms = New-Object IO.MemoryStream; $r.RawContentStream.CopyTo($ms); [Console]::OpenStandardOutput().Write($ms.ToArray(), 0, $ms.Length)")
+    bpart = ' -Body $b -ContentType "application/json"' if body is not None else ''
+    lines.append(f"Invoke-WebRequest -Uri '{url}' -Method {method} -Headers $h{bpart} -OutFile '{out_file}.part' -UseBasicParsing -TimeoutSec {int(timeout)}")
     ps = tempfile.NamedTemporaryFile('w', suffix='.ps1', delete=False, dir=DATA, encoding='utf-8-sig')
     ps.write('\n'.join(lines) + '\n')
     ps.close()
@@ -1050,12 +1097,13 @@ def ps_http(url, method='GET', headers=None, body=None, out_file=None, timeout=6
         cp = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps.name], capture_output=True, timeout=timeout + 30)
         if cp.returncode != 0:
             raise RuntimeError('PowerShell 실패: ' + cp.stderr.decode('utf-8', 'replace').strip()[:160])
-        if out_file:
-            os.replace(out_file + '.part', out_file)
+        os.replace(out_file + '.part', out_file)
+        if not ret_file:
             return b''
-        return cp.stdout
+        with open(ret_file, 'rb') as f:
+            return f.read()
     finally:
-        for f in (ps.name, tmp_body.name if tmp_body else None):
+        for f in (ps.name, tmp_body.name if tmp_body else None, ret_file):
             try:
                 if f:
                     os.remove(f)
@@ -1074,8 +1122,8 @@ def http_get(url, limit, timeout=30, headers=None):
         except Exception as e:
             if not _is_ssl_err(e) or os.name != 'nt':
                 raise
-            print('[망] 파이썬 인증서 오류 → PowerShell로 대신 받습니다', flush=True)
-    data = ps_http(url, 'GET', hdr, timeout=timeout)
+            print('[망] 파이썬 인증서 오류 → curl/PowerShell로 대신 받습니다', flush=True)
+    data = sh_http(url, 'GET', hdr, timeout=timeout)
     PS_OK[0] = True
     return data[:limit]
 
@@ -1289,7 +1337,7 @@ def publish_url(url):
     try:
         payload = json.dumps(body).encode('utf-8')
         if PS_OK[0] is True:
-            ps_http(api, 'PUT', hdr, body=payload, timeout=40)
+            sh_http(api, 'PUT', hdr, body=payload, timeout=40)
         else:
             try:
                 req = urllib.request.Request(api, data=payload, headers=dict(hdr, **{'Content-Type': 'application/json'}), method='PUT')
@@ -1298,7 +1346,7 @@ def publish_url(url):
             except Exception as e1:
                 if not _is_ssl_err(e1) or os.name != 'nt':
                     raise
-                ps_http(api, 'PUT', hdr, body=payload, timeout=40)
+                sh_http(api, 'PUT', hdr, body=payload, timeout=40)
                 PS_OK[0] = True
         PUBLISH_STATE['msg'] = '등록됨'
         PUBLISH_STATE['url'] = url
@@ -1325,8 +1373,8 @@ def ensure_cloudflared():
         except Exception as e1:
             if not _is_ssl_err(e1):
                 raise
-            print('[터널] 파이썬 인증서 오류 → PowerShell로 대신 받습니다', flush=True)
-            ps_http(url, 'GET', {}, out_file=dst + '.part', timeout=300)
+            print('[터널] 파이썬 인증서 오류 → curl/PowerShell로 대신 받습니다', flush=True)
+            sh_http(url, 'GET', {}, out_file=dst + '.part', timeout=300)
         if os.path.getsize(dst + '.part') < 10_000_000:
             raise ValueError('받은 파일이 너무 작음')
         os.replace(dst + '.part', dst)

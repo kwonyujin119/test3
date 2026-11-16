@@ -4,7 +4,7 @@
 
 ## 0. 가장 쉬운 길 — fix.bat 한 번 (정리 + 최신화 + 켜기)
 
-ZIP을 받아 풀고 `server\fix.bat`을 더블클릭하면 끝입니다. 돌고 있는 앨범 서버를 멈추고, PC 안의 다른 앨범 폴더에서 사진·목록·설정을 **표준 폴더 `D:\사진저장소`로 복사**(원본은 지우지 않음)한 뒤 최신 파일을 넣고 서버를 켭니다. 켜진 뒤 브라우저에 상태 화면이 열립니다. 앞으로는 `D:\사진저장소\server\start.bat`로 켭니다.
+ZIP(https://github.com/kwonyujin119/test3/archive/refs/heads/main.zip)을 받아 풀고 맨 위의 `업데이트.bat`(= `server\fix.bat`)을 더블클릭하면 끝입니다. 돌고 있는 앨범 서버를 멈추고, PC 안의 다른 앨범 폴더에서 사진·목록·설정을 **표준 폴더 `D:\사진저장소`로 복사**(원본은 지우지 않음)한 뒤 최신 파일을 넣고 서버를 켭니다. 켜진 뒤 브라우저에 상태 화면이 열립니다. 앞으로는 `D:\사진저장소\server\start.bat`로 켭니다.
 
 ## 1. 설치 (처음 한 번)
 
@@ -50,6 +50,7 @@ ZIP을 받아 풀고 `server\fix.bat`을 더블클릭하면 끝입니다. 돌고
   py album_server.py --set-photos-dir E:\앨범사진
   ```
 - 자동 업데이트: 10분마다 GitHub의 `server/album_server.py`가 새 버전이면 스스로 교체하고 다시 켭니다(`start.bat`으로 켰을 때만).
+  - 2.8부터 파이썬 인증서 오류 PC에서는 curl.exe(윈도우 기본 포함) → PowerShell 순서로 파일로 받습니다. 2.3~2.7의 PowerShell 방식은 본문이 비어 와서 업데이트가 멈추는 문제가 있었습니다.
   - 2.7부터 받는 길이 세 가지(raw.githubusercontent.com → kwonyujin119.github.io → api.github.com). 앞의 둘이 차단 페이지로 바뀌어 오는 망에서는 GitHub API로 받습니다(토큰이 등록돼 있으면 더 넉넉함).
 - 용량: 사진 1장 30MB, 전체 20GB(`data\config.json`의 `max_store_mb`).
 - 백업할 것: `D:\사진저장소`의 사진 폴더들과 `server\data\album.db`.
