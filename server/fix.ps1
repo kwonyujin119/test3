@@ -64,9 +64,9 @@ foreach ($dir in $found) {
   $photos = Get-PhotosDir $dir
   $n = 0
   if (Test-Path $photos) {
-    $n = @(Get-ChildItem -Path $photos -File -Recurse -Depth 1 -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^[a-f0-9]{24}$' }).Count
+    $n = @(Get-ChildItem -Path $photos -File -Recurse -Depth 1 -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^[a-f0-9]{24}(\.[a-z0-9]+)?$' }).Count
   }
-  Write-Host "   찾음: $dir  (사진 파일 $n개)"
+  Write-Host "   찾음: $dir  (사진 파일 ${n}개)"
   if ($n -gt 0 -and $photos -ne $targetPhotos) {
     # 사진 파일 복사(있는 파일은 건너뜀, 하위 폴더 유지)
     Get-ChildItem -Path $photos -Recurse -Depth 1 -File -ErrorAction SilentlyContinue | ForEach-Object {
